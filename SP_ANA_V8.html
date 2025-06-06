@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S-P 表分析工具</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 1000px;
+            margin: 30px auto;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1, h2 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 25px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        textarea {
+            width: calc(100% - 20px);
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 2px solid rgba(102, 126, 234, 0.3);
+            border-radius: 10px;
+            font-size: 1rem;
+            line-height: 1.5;
+            min-height: 150px;
+            resize: vertical;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+        }
+        textarea:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.2);
+            outline: none;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+        .results {
+            background: rgba(233, 236, 239, 0.9);
+            padding: 25px;
+            border-radius: 15px;
+            margin-top: 25px;
+            border-left: 5px solid #667eea;
+            backdrop-filter: blur(5px);
+        }
+        .results h3 {
+            color: #2c3e50;
+            margin-top: 0;
+            border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .results p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+        .results p strong {
+            color: #667eea;
+        }
+        .overall-assessment {
+            font-weight: normal;
+        }
+        .overall-assessment.good {
+            color: #333 !important;
+        }
+        .overall-assessment.warning {
+            color: #dc3545 !important;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        table, th, td {
+            border: 1px solid rgba(221, 221, 221, 0.5);
+        }
+        th, td {
+            padding: 12px;
+            text-align: center;
+            transition: background-color 0.3s ease;
+        }
+        th {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: transparent;
+        }
+        
+        /* S-P表格的十字定位效果 */
+        #spTable {
+            position: relative;
+        }
+        
+        /* 只在數據儲存格(sp-cell-1或sp-cell-0)上顯示十字定位效果 */
+        #spTable td.sp-cell-1:hover,
+        #spTable td.sp-cell-0:hover {
+            background-color: rgba(102, 126, 234, 0.4) !important;
+            position: relative;
+        }
+        
+        #spTable td.sp-cell-1:hover::before,
+        #spTable td.sp-cell-0:hover::before {
+            content: '';
+            position: absolute;
+            top: -1000px;
+            bottom: -1000px;
+            left: 0;
+            right: 0;
+            background-color: rgba(102, 126, 234, 0.25);
+            z-index: -1;
+            pointer-events: none;
+        }
+        
+        #spTable td.sp-cell-1:hover::after,
+        #spTable td.sp-cell-0:hover::after {
+            content: '';
+            position: absolute;
+            left: -1000px;
+            right: -1000px;
+            top: 0;
+            bottom: 0;
+            background-color: rgba(102, 126, 234, 0.25);
+            z-index: -1;
+            pointer-events: none;
+        }
+        .warning {
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 15px;
+            text-align: center;
+        }
+        .deviation {
+            background-color: rgba(255, 204, 204, 0.8);
+        }
+        .sp-boundary-s {
+            border-right: 3px solid #667eea !important;
+        }
+        .sp-boundary-p {
+            border-bottom: 3px solid #28a745 !important;
+        }
+        .sp-boundary-s-horizontal {
+            border-bottom: 3px solid #667eea !important;
+        }
+        .sp-boundary-p-vertical {
+            border-right: 3px solid #28a745 !important;
+        }
+        .sp-cell-1 {
+            color: #667eea;
+            font-weight: bold;
+        }
+        .sp-cell-0 {
+            color: #dc3545;
+        }
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            border: 2px dashed rgba(102, 126, 234, 0.3);
+            border-radius: 10px;
+            font-size: 0.9em;
+            background: rgba(248, 249, 250, 0.9);
+        }
+        .legend-item {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        .legend-item:hover {
+            background-color: rgba(102, 126, 234, 0.1);
+        }
+        .legend-color-box {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 1px solid #ccc;
+            vertical-align: middle;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        .collapsible {
+            background: linear-gradient(135deg, rgba(248, 249, 250, 0.9), rgba(233, 236, 239, 0.9));
+            color: #2c3e50;
+            cursor: pointer;
+            padding: 18px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .collapsible:hover {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        .collapsible.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .collapsible::after {
+            content: '\002B';
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        .collapsible.active::after {
+            content: '\2212';
+        }
+        .collapsible-content {
+            padding: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.95);
+            border-left: 4px solid #667eea;
+            border-radius: 0 0 10px 10px;
+            backdrop-filter: blur(5px);
+        }
+        .collapsible-content.active {
+            padding: 20px;
+            max-height: 1000px;
+        }
+        .input-section {
+            background: rgba(248, 249, 250, 0.9);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            border-left: 4px solid #667eea;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .input-section h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.3rem;
+        }
+        .input-section ul {
+            margin: 15px 0;
+            padding-left: 25px;
+        }
+        .input-section li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        input[type="file"]:hover {
+            border-color: #764ba2;
+            background: rgba(248, 249, 250, 0.9);
+            transform: translateY(-2px);
+        }
+        .file-preview {
+            background: rgba(233, 236, 239, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border: 1px solid rgba(206, 212, 218, 0.5);
+            backdrop-filter: blur(5px);
+        }
+        .file-preview h4 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .preview-table {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+        }
+        .preview-table table {
+            margin: 0;
+            font-size: 0.9em;
+        }
+        .preview-table th, .preview-table td {
+            padding: 8px 10px;
+            font-size: 0.85em;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .container {
+            animation: fadeIn 0.8s ease-out;
+        }
+        .results {
+            animation: fadeIn 0.6s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>S-P 表分析工具</h1>
+        
+        <h2>資料輸入方式</h2>
+        
+        <div class="input-section">
+            <h3>方式一：手動輸入</h3>
+            <p>請在下方文字框中輸入學生的作答數據。每一行代表一位學生，每個數字之間用空白、逗號或 Tab 鍵隔開。</p>
+            <p>例如：</p>
+            <pre>1 1 0 1 0</pre>
+            <pre>0 1 1 0 1</pre>
+            <pre>1 0 1 1 0</pre>
+            <label for="dataInput">輸入學生的作答數據 (0 或 1):</label>
+            <textarea id="dataInput" placeholder="每行一位學生，用空白、逗號或Tab鍵分隔作答結果 (0或1)"></textarea>
+        </div>
+        
+        <div class="input-section">
+            <h3>方式二：上傳Excel檔案</h3>
+            <p>上傳包含學生作答數據的Excel檔案。檔案格式要求：</p>
+            <ul>
+                <li>每一行代表一位學生</li>
+                <li>每一列代表一個題目</li>
+                <li>儲存格內容必須是 0 (答錯) 或 1 (答對)</li>
+                <li>可以包含標題行，程式會自動識別數據區域</li>
+            </ul>
+            <label for="fileInput">選擇Excel檔案 (.xlsx, .xls):</label>
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+            <div id="filePreview" class="file-preview" style="display:none;">
+                <h4>檔案預覽：</h4>
+                <div id="previewContent"></div>
+            </div>
+        </div>
+        
+        <button onclick="performSPAnalysis()">執行 S-P 表分析</button>
+
+        <div id="results" class="results" style="display:none;">
+            <h3>排序後的 S-P 表 (含 S/P 曲線標示)</h3>
+            <table id="spTable">
+                <thead></thead>
+                <tbody></tbody>
+            </table>
+
+            <button type="button" class="collapsible">🎯 S-P 表格說明</button>
+            <div class="collapsible-content">
+                <div class="legend-item"><span class="legend-color-box sp-cell-1"></span> `1` (答對)</div>
+                <div class="legend-item"><span class="legend-color-box sp-cell-0"></span> `0` (答錯)</div>
+                <div class="legend-item"><span class="legend-color-box" style="background-color: #ffcccc;"></span> 該儲存格偏離理想模式 (異常反應)</div>
+                <div class="legend-item"><span class="legend-color-box" style="border-right: 2px solid #007bff;"></span> **S 曲線邊界 (垂直)**：標示 S 曲線的垂直路徑</div>
+                <div class="legend-item"><span class="legend-color-box" style="border-bottom: 2px solid #007bff;"></span> **S 曲線邊界 (水平)**：標示 S 曲線的水平連接路徑</div>
+                <div class="legend-item"><span class="legend-color-box" style="border-bottom: 2px solid #28a745;"></span> **P 曲線邊界 (水平)**：標示 P 曲線的水平路徑</div>
+                <div class="legend-item"><span class="legend-color-box" style="border-right: 2px solid #28a745;"></span> **P 曲線邊界 (垂直)**：標示 P 曲線的垂直連接路徑</div>
+            </div>
+
+            <h3>整體分析結果</h3>
+            <p><strong>差異係數 (D*):</strong> <span id="disparityCoefficient"></span> <small style="color: #666;">(Sato-Harnisch 公式)</small></p>
+            <p><strong>同質性係數:</strong> <span id="homogeneityCoefficient"></span></p>
+            <div style="margin-bottom: 10px; line-height: 1.6;">
+                <strong style="color: #667eea;">整體評估:</strong> 
+                <span id="overallAssessment"></span>
+            </div>
+
+            <button type="button" class="collapsible">📊 差異係數 (D*) 說明</button>
+            <div class="collapsible-content">
+                <h4>差異係數 (D*) 的意義：</h4>
+                <div class="legend-item">D* 反映測驗結果偏離理想Guttman模式的程度，範圍0-1，數值越小表示越接近理想反應模式。</div>
+                
+                <h4>計算方法 (Sato-Harnisch 公式)：</h4>
+                <div class="legend-item">D* = C / [4 × N × n × P × (1-P) × D_B(M)]</div>
+                <div class="legend-item">其中 C：偏離數，N：學生數，n：題目數，P：平均答對率，M：高斯整數值，D_B(M)：邊界校正係數</div>
+                <div class="legend-item">M = G[√(N×n) + 0.5] (G表示高斯整數值，即四捨五入)</div>
+                <div class="legend-item">D_B(M) = (N + n - 2M) / (N + n)</div>
+                <div class="legend-item">理想模式判斷：學生i在題目j應答對 ⟺ (j < 學生總得分) 或 (i < 題目總得分)</div>
+                
+                <h4>D* 值的解釋標準：</h4>
+                <div class="legend-item">• <strong>0.0-0.3：</strong> 非常高的一致性</div>
+                <div class="legend-item">• <strong>0.3-0.6：</strong> 良好的一致性</div>
+                <div class="legend-item">• <strong>0.6-0.8：</strong> 中等一致性，需要檢視</div>
+                <div class="legend-item">• <strong>0.8以上：</strong> 一致性差，測驗可能有問題</div>
+                
+                <h4>D* 過小或過大可能的問題：</h4>
+                <div class="legend-item">• <strong>測驗設計：</strong> 題目過於簡單或困難、缺乏難度層次</div>
+                <div class="legend-item">• <strong>樣本特性：</strong> 學生能力過於同質、樣本規模過小</div>
+                <div class="legend-item">• <strong>教學效果：</strong> 內容過於基礎、缺乏挑戰性</div>
+                <div class="legend-item">• <strong>測量品質：</strong> 可能影響鑑別度和效度</div>
+                
+                <h4>改善建議：</h4>
+                <div class="legend-item">• 檢視題目難度分布，確保有適當的難度梯度</div>
+                <div class="legend-item">• 評估樣本的代表性和多樣性</div>
+                <div class="legend-item">• 結合CP值、CS值等其他指標綜合判斷</div>
+            </div>
+
+            <h3>試題難度與鑑別度分析</h3>
+            <table id="itemAnalysisTable">
+                <thead>
+                    <tr>
+                        <th>題號</th>
+                        <th>難度 (P值)</th>
+                        <th>鑑別度 (D值)</th>
+                        <th>難度解釋</th>
+                        <th>鑑別度解釋</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <button type="button" class="collapsible">📈 試題分析說明</button>
+            <div class="collapsible-content">
+                <div class="legend-item"><strong>難度 (P值)：</strong>答對率，範圍 0-1，越高表示越容易</div>
+                <div class="legend-item"><strong>鑑別度 (D值)：</strong>高分組與低分組答對率差異，範圍 -1 到 1，越高表示越能區分能力差異</div>
+                <div class="legend-item">難度建議：<span style="color: #28a745;">中等 (0.4-0.6)</span> 最理想，<span style="color: #ffc107;">容易/困難 (0.2-0.8)</span> 可接受，<span style="color: #dc3545;">過易/過難</span> 需調整</div>
+                <div class="legend-item">鑑別度建議：<span style="color: #28a745;">≥0.3</span> 良好，<span style="color: #ffc107;">0.2-0.3</span> 可接受，<span style="color: #dc3545;"><0.2</span> 需改進</div>
+            </div>
+
+            <h3>試題注意係數 (CP)</h3>
+            <table id="itemCautionTable">
+                <thead>
+                    <tr><th>題號</th><th>答對百分比</th><th>CP 值</th><th>品質評估</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            
+            <button type="button" class="collapsible">⚠️ 試題注意係數 (CP) 說明</button>
+            <div class="collapsible-content">
+                <div class="legend-item"><strong>CP值 (試題注意係數)：</strong>試題偏離理想反應模式的程度</div>
+                <div class="legend-item">CP標準：<span style="background-color: #d4edda; padding: 2px 4px;">0 ≤ 值 < 0.5</span> 可接受範圍，<span style="background-color: #fff3cd; padding: 2px 4px;">0.5 ≤ 值 < 0.75</span> 嚴重程度，<span style="background-color: #ffcccc; padding: 2px 4px;">0.75 ≤ 值</span> 非常嚴重</div>
+                <div class="legend-item"><strong>CP值高的可能原因：</strong></div>
+                <div class="legend-item">• 題目表達不清楚或有歧義</div>
+                <div class="legend-item">• 題目難度與整體測驗不匹配</div>
+                <div class="legend-item">• 題目內容超出學習範圍或過於冷僻</div>
+                <div class="legend-item">• 選項設計有問題（如有明顯錯誤選項）</div>
+                <div class="legend-item"><strong>建議處理方式：</strong></div>
+                <div class="legend-item">• 檢視高CP值題目的內容和表達方式</div>
+                <div class="legend-item">• 考慮修改或刪除問題題目</div>
+                <div class="legend-item">• 分析題目與教學內容的一致性</div>
+            </div>
+
+            <button type="button" class="collapsible">📋 試題品質評估圖例</button>
+            <div class="collapsible-content">
+                <div class="legend-item">🟢 答對率 > 50% 且 CP值 < 0.5，適合區別低成就者與其他學生的試題</div>
+                <div class="legend-item">🟡 答對率 > 50% 且 CP值 ≥ 0.5，試題可能有異質成分，需修正或排除不佳選項</div>
+                <div class="legend-item">🔵 答對率 ≤ 50% 且 CP值 < 0.5，適合區別高成就者的優質難題</div>
+                <div class="legend-item">🔴 答對率 ≤ 50% 且 CP值 ≥ 0.5，試題較不理想，可能有登錄錯誤或題意不明</div>
+            </div>
+
+            <h3>學生注意係數 (CS)</h3>
+            <table id="studentCautionTable">
+                <thead>
+                    <tr><th>學生編號</th><th>得分百分比</th><th>CS 值</th><th>學生診斷</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <button type="button" class="collapsible">⚠️ 學生注意係數 (CS) 說明</button>
+            <div class="collapsible-content">
+                <div class="legend-item"><strong>CS值 (學生注意係數)：</strong>學生反應偏離理想模式的程度</div>
+                <div class="legend-item">CS標準：<span style="background-color: #d4edda; padding: 2px 4px;">0 ≤ 值 < 0.5</span> 可接受範圍，<span style="background-color: #fff3cd; padding: 2px 4px;">0.5 ≤ 值 < 0.75</span> 嚴重程度，<span style="background-color: #ffcccc; padding: 2px 4px;">0.75 ≤ 值</span> 非常嚴重</div>
+                <div class="legend-item"><strong>CS值高的可能原因：</strong></div>
+                <div class="legend-item">• 學生可能猜測答案或有不當答題行為</div>
+                <div class="legend-item">• 學生對某些簡單題目反而答錯</div>
+                <div class="legend-item">• 學生學習狀況不穩定或有特殊學習需求</div>
+                <div class="legend-item">• 測驗環境或指導語可能影響學生表現</div>
+                <div class="legend-item"><strong>建議處理方式：</strong></div>
+                <div class="legend-item">• 進一步了解高CS值學生的學習狀況</div>
+                <div class="legend-item">• 檢視測驗實施過程是否有問題</div>
+                <div class="legend-item">• 考慮提供個別化的學習輔導</div>
+            </div>
+
+            <button type="button" class="collapsible">📊 學生診斷分析圖例</button>
+            <div class="collapsible-content">
+                <div class="legend-item">🟢 <strong>學習良好、穩定性高</strong> - 答對率 > 75%，CS < 0.5</div>
+                <div class="legend-item">🟡 <strong>學生可能粗心大意，不夠細心</strong> - 答對率 > 75%，CS ≥ 0.5</div>
+                <div class="legend-item">🔵 <strong>學習尚穩定，需要再用功一點</strong> - 答對率 50-75%，CS < 0.5</div>
+                <div class="legend-item">🟠 <strong>偶爾粗心，準備不充分，需要再努力</strong> - 答對率 50-75%，CS ≥ 0.5</div>
+                <div class="legend-item">🟣 <strong>學力不足，學習不夠充分，需要更加努力</strong> - 答對率 < 50%，CS < 0.5</div>
+                <div class="legend-item">🔴 <strong>學習極不穩定，可能有隨興讀書傾向，對考試缺乏充分準備</strong> - 答對率 < 50%，CS ≥ 0.5</div>
+            </div>
+        </div>
+        <div id="errorMessages" class="warning" style="display:none;"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        let currentData = null;
+
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length === 0) {
+                        throw new Error("Excel檔案似乎是空的");
+                    }
+
+                    const processedData = processExcelData(jsonData);
+                    currentData = processedData;
+                    
+                    displayFilePreview(processedData, firstSheetName);
+                    
+                    document.getElementById('dataInput').value = '';
+                    
+                } catch (error) {
+                    alert(`讀取Excel檔案時發生錯誤：${error.message}`);
+                    console.error('Excel讀取錯誤：', error);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processExcelData(rawData) {
+            const cleanedData = rawData.filter(row => 
+                row && row.length > 0 && row.some(cell => cell !== null && cell !== undefined && cell !== '')
+            );
+
+            if (cleanedData.length === 0) {
+                throw new Error("沒有找到有效的數據");
+            }
+
+            let dataRows = [];
+            let maxCols = 0;
+
+            for (let row of cleanedData) {
+                const validNumbers = row.filter(cell => cell === 0 || cell === 1 || cell === '0' || cell === '1');
+                
+                if (validNumbers.length >= Math.max(2, row.length * 0.5)) {
+                    const cleanRow = row.map(cell => {
+                        if (cell === 0 || cell === '0') return 0;
+                        if (cell === 1 || cell === '1') return 1;
+                        if (cell === null || cell === undefined || cell === '') return null;
+                        const num = Number(cell);
+                        if (num === 0 || num === 1) return num;
+                        return null;
+                    }).filter(cell => cell === 0 || cell === 1);
+
+                    if (cleanRow.length > 0) {
+                        dataRows.push(cleanRow);
+                        maxCols = Math.max(maxCols, cleanRow.length);
+                    }
+                }
+            }
+
+            if (dataRows.length === 0) {
+                throw new Error("沒有找到包含0或1的有效數據行");
+            }
+
+            const minCols = Math.min(...dataRows.map(row => row.length));
+            const finalData = dataRows.map(row => row.slice(0, minCols));
+
+            if (finalData.some(row => row.length !== minCols)) {
+                console.warn("數據行長度不一致，已統一為最短長度");
+            }
+
+            return finalData;
+        }
+
+        function displayFilePreview(data, sheetName) {
+            const previewDiv = document.getElementById('filePreview');
+            const previewContent = document.getElementById('previewContent');
+            
+            let html = `<p><strong>工作表：</strong>${sheetName}</p>`;
+            html += `<p><strong>數據大小：</strong>${data.length} 個學生，${data[0]?.length || 0} 個題目</p>`;
+            
+            const previewRows = Math.min(10, data.length);
+            const previewCols = Math.min(10, data[0]?.length || 0);
+            
+            html += '<div class="preview-table"><table><thead><tr><th>學生</th>';
+            for (let j = 0; j < previewCols; j++) {
+                html += `<th>Q${j + 1}</th>`;
+            }
+            if (data[0]?.length > previewCols) {
+                html += '<th>...</th>';
+            }
+            html += '</tr></thead><tbody>';
+            
+            for (let i = 0; i < previewRows; i++) {
+                html += `<tr><td>S${i + 1}</td>`;
+                for (let j = 0; j < previewCols; j++) {
+                    const value = data[i][j];
+                    const cellClass = value === 1 ? 'sp-cell-1' : 'sp-cell-0';
+                    html += `<td class="${cellClass}">${value}</td>`;
+                }
+                if (data[0]?.length > previewCols) {
+                    html += '<td>...</td>';
+                }
+                html += '</tr>';
+            }
+            
+            if (data.length > previewRows) {
+                html += '<tr><td colspan="100%">...</td></tr>';
+            }
+            
+            html += '</tbody></table></div>';
+            html += '<p><em>以上是數據預覽，點擊「執行 S-P 表分析」開始分析</em></p>';
+            
+            previewContent.innerHTML = html;
+            previewDiv.style.display = 'block';
+        }
+
+        function parseInput(input) {
+            const lines = input.trim().split('\n').filter(line => line.trim() !== '');
+            const data = [];
+            let numProblems = 0;
+
+            for (const line of lines) {
+                const row = line.split(/[\s,]+/).filter(d => d !== '').map(Number);
+                if (row.some(isNaN) || row.some(val => val !== 0 && val !== 1)) {
+                    throw new Error("輸入的數據必須是 0 或 1，且為數字。");
+                }
+                if (numProblems === 0) {
+                    numProblems = row.length;
+                } else if (row.length !== numProblems) {
+                    throw new Error("每位學生的作答題數必須一致。");
+                }
+                data.push(row);
+            }
+            if (data.length === 0 || numProblems === 0) {
+                throw new Error("請輸入有效的作答數據。");
+            }
+            return data;
+        }
+
+        function calculateSPAnalysis(rawData) {
+            let students = rawData.length;
+            let problems = rawData[0].length;
+
+            const studentScores = rawData.map(row => row.reduce((sum, val) => sum + val, 0));
+
+            const problemScores = Array(problems).fill(0);
+            for (let i = 0; i < students; i++) {
+                for (let j = 0; j < problems; j++) {
+                    problemScores[j] += rawData[i][j];
+                }
+            }
+
+            const studentIndices = Array.from({ length: students }, (_, i) => i);
+            studentIndices.sort((a, b) => studentScores[b] - studentScores[a]);
+
+            const problemIndices = Array.from({ length: problems }, (_, i) => i);
+            problemIndices.sort((a, b) => problemScores[b] - problemScores[a]);
+
+            const sortedData = Array(students).fill(0).map(() => Array(problems).fill(0));
+            for (let i = 0; i < students; i++) {
+                for (let j = 0; j < problems; j++) {
+                    sortedData[i][j] = rawData[studentIndices[i]][problemIndices[j]];
+                }
+            }
+
+            const sortedStudentScores = studentIndices.map(idx => studentScores[idx]);
+            const sortedProblemScores = problemIndices.map(idx => problemScores[idx]);
+
+            // ===== 差異係數 (D*) 計算 =====
+            // 使用標準版 Sato-Harnisch 公式計算偏離數（OR邏輯）
+            let totalDeviations = 0;
+            for (let i = 0; i < students; i++) {
+                for (let j = 0; j < problems; j++) {
+                    let actual = sortedData[i][j];
+                    // 標準版：OR邏輯
+                    let expected = (j < sortedStudentScores[i] || i < sortedProblemScores[j]) ? 1 : 0;
+                    
+                    if (actual !== expected) {
+                        totalDeviations++;
+                    }
+                }
+            }
+            
+            // 計算標準版參數
+            const P = sortedProblemScores.reduce((a,b)=>a+b,0)/(students*problems);
+            
+            // 正確的 M 值計算：M = G[√Nn + 0.5] (高斯整數值)
+            const M = Math.round(Math.sqrt(students * problems) + 0.5);
+            
+            // 計算邊界校正係數 D_B(M)
+            let DB = (students + problems - 2 * M) / (students + problems);
+            
+            // 如果 DB 為負或過小，使用備用計算
+            if (DB <= 0) {
+                DB = 0.1; // 給一個小的正值避免分母為零
+            }
+            
+            // 計算標準版分母：4 × N × n × P × (1-P) × D_B(M)
+            let denominator = 4 * students * problems * P * (1 - P) * DB;
+            
+            let disparityCoefficient;
+            // 安全檢查
+            if (denominator <= 0 || P <= 0 || P >= 1 || isNaN(denominator)) {
+                // 如果分母計算有問題，回退到簡單計算
+                disparityCoefficient = totalDeviations / (students * problems);
+            } else {
+                disparityCoefficient = totalDeviations / denominator;
+            }
+            
+            // 確保結果在 0-1 範圍內
+            disparityCoefficient = Math.min(Math.max(disparityCoefficient, 0), 1);
+
+            const homogeneityCoefficient = 1 - disparityCoefficient;
+
+            const itemAnalysis = calculateItemAnalysis(rawData, sortedData, studentIndices, problemIndices);
+
+            const itemCautionIndices = [];
+            const studentCautionIndices = [];
+
+            for (let j = 0; j < problems; j++) {
+                let cp_sum = 0;
+                let problem_score_perfect = sortedProblemScores[j];
+                for (let i = 0; i < students; i++) {
+                    let perfect_response = (i < problem_score_perfect) ? 1 : 0;
+                    cp_sum += Math.abs(sortedData[i][j] - perfect_response);
+                }
+                let max_diff_cp = Math.min(problem_score_perfect, students - problem_score_perfect);
+                if (max_diff_cp === 0) {
+                    itemCautionIndices.push(0);
+                } else {
+                    itemCautionIndices.push(cp_sum / max_diff_cp);
+                }
+            }
+
+            for (let i = 0; i < students; i++) {
+                let cs_sum = 0;
+                let student_score_perfect = sortedStudentScores[i];
+                for (let j = 0; j < problems; j++) {
+                    let perfect_response = (j < student_score_perfect) ? 1 : 0;
+                    cs_sum += Math.abs(sortedData[i][j] - perfect_response);
+                }
+                let max_diff_cs = Math.min(student_score_perfect, problems - student_score_perfect);
+                if (max_diff_cs === 0) {
+                    studentCautionIndices.push(0);
+                } else {
+                    studentCautionIndices.push(cs_sum / max_diff_cs);
+                }
+            }
+
+            return {
+                disparityCoefficient: disparityCoefficient.toFixed(3),
+                homogeneityCoefficient: homogeneityCoefficient.toFixed(3),
+                itemCautionIndices: itemCautionIndices.map(val => val.toFixed(3)),
+                studentCautionIndices: studentCautionIndices.map(val => val.toFixed(3)),
+                itemAnalysis: itemAnalysis,
+                sortedData: sortedData,
+                sortedStudentScores: sortedStudentScores,
+                sortedProblemScores: sortedProblemScores,
+                originalStudentIndices: studentIndices,
+                originalProblemIndices: problemIndices,
+                students: students,
+                problems: problems
+            };
+        }
+
+        function calculateItemAnalysis(rawData, sortedData, studentIndices, problemIndices) {
+            const students = rawData.length;
+            const problems = rawData[0].length;
+            const itemAnalysis = [];
+
+            for (let originalProblemIdx = 0; originalProblemIdx < problems; originalProblemIdx++) {
+                let correctCount = 0;
+                for (let i = 0; i < students; i++) {
+                    correctCount += rawData[i][originalProblemIdx];
+                }
+                const difficulty = correctCount / students;
+
+                const discrimination = calculateDiscrimination(rawData, originalProblemIdx);
+
+                let difficultyLabel = "";
+                if (difficulty >= 0.8) difficultyLabel = "很容易";
+                else if (difficulty >= 0.6) difficultyLabel = "容易";
+                else if (difficulty >= 0.4) difficultyLabel = "中等";
+                else if (difficulty >= 0.2) difficultyLabel = "困難";
+                else difficultyLabel = "很困難";
+
+                let discriminationLabel = "";
+                if (discrimination >= 0.4) discriminationLabel = "很好";
+                else if (discrimination >= 0.3) discriminationLabel = "好";
+                else if (discrimination >= 0.2) discriminationLabel = "可接受";
+                else if (discrimination >= 0.1) discriminationLabel = "需改進";
+                else discriminationLabel = "很差";
+
+                itemAnalysis.push({
+                    problemNumber: originalProblemIdx + 1,
+                    difficulty: difficulty.toFixed(3),
+                    discrimination: discrimination.toFixed(3),
+                    difficultyLabel: difficultyLabel,
+                    discriminationLabel: discriminationLabel
+                });
+            }
+
+            return itemAnalysis;
+        }
+
+        function calculateDiscrimination(rawData, problemIndex) {
+            const students = rawData.length;
+            
+            const studentScores = rawData.map(row => row.reduce((sum, val) => sum + val, 0));
+            
+            const studentIndicesWithScores = studentScores.map((score, index) => ({
+                index: index,
+                score: score
+            })).sort((a, b) => b.score - a.score);
+
+            const groupSize = Math.max(1, Math.floor(students * 0.27));
+            
+            const highGroup = studentIndicesWithScores.slice(0, groupSize);
+            const lowGroup = studentIndicesWithScores.slice(-groupSize);
+
+            const highGroupCorrect = highGroup.reduce((sum, student) => 
+                sum + rawData[student.index][problemIndex], 0);
+            const highGroupRate = highGroupCorrect / groupSize;
+
+            const lowGroupCorrect = lowGroup.reduce((sum, student) => 
+                sum + rawData[student.index][problemIndex], 0);
+            const lowGroupRate = lowGroupCorrect / groupSize;
+
+            return highGroupRate - lowGroupRate;
+        }
+
+        function performSPAnalysis() {
+            const dataInput = document.getElementById('dataInput').value;
+            const resultsDiv = document.getElementById('results');
+            const errorMessagesDiv = document.getElementById('errorMessages');
+            errorMessagesDiv.style.display = 'none';
+            resultsDiv.style.display = 'none';
+
+            let rawData;
+
+            try {
+                if (currentData && currentData.length > 0) {
+                    rawData = currentData;
+                    console.log('使用Excel數據進行分析');
+                } else if (dataInput.trim()) {
+                    rawData = parseInput(dataInput);
+                    console.log('使用手動輸入數據進行分析');
+                } else {
+                    throw new Error("請輸入數據或上傳Excel檔案");
+                }
+
+                const analysisResults = calculateSPAnalysis(rawData);
+
+                document.getElementById('disparityCoefficient').textContent = analysisResults.disparityCoefficient;
+                document.getElementById('homogeneityCoefficient').textContent = analysisResults.homogeneityCoefficient;
+
+                // 整體評估
+                const dValue = parseFloat(analysisResults.disparityCoefficient);
+                let assessment = "";
+                let description = "";
+                let textColor = "#333"; // 預設黑色
+                
+                if (dValue <= 0.2) {
+                    assessment = "學生能力與試題難度高度一致";
+                    description = "測驗具有良好的階層結構";
+                    textColor = "#333"; // 黑色
+                } else if (dValue <= 0.4) {
+                    assessment = "學生能力與試題難度良好配適";
+                    description = "測驗結果符合預期模式";
+                    textColor = "#333"; // 黑色
+                } else if (dValue <= 0.6) {
+                    assessment = "學生能力與試題難度中等配適，建議檢視";
+                    description = "可能需要調整部分試題或教學內容";
+                    textColor = "#dc3545"; // 紅色
+                } else {
+                    assessment = "學生能力與試題難度配適不佳，測驗可能有問題";
+                    description = "建議重新檢視測驗設計或實施過程";
+                    textColor = "#dc3545"; // 紅色
+                }
+                
+                const overallElement = document.getElementById('overallAssessment');
+                overallElement.innerHTML = `${assessment} - ${description}`;
+                
+                // 直接設定顏色
+                if (dValue <= 0.4) {
+                    overallElement.style.color = '#333';
+                    overallElement.style.fontWeight = 'bold';
+                } else {
+                    overallElement.style.color = '#dc3545';
+                    overallElement.style.fontWeight = 'bold';
+                }
+
+                document.querySelector('#spTable thead').innerHTML = '';
+                document.querySelector('#spTable tbody').innerHTML = '';
+                document.querySelector('#itemCautionTable tbody').innerHTML = '';
+                document.querySelector('#itemAnalysisTable tbody').innerHTML = '';
+                document.querySelector('#studentCautionTable tbody').innerHTML = '';
+
+                const itemCautionTableBody = document.querySelector('#itemCautionTable tbody');
+                itemCautionTableBody.innerHTML = '';
+                analysisResults.itemCautionIndices.forEach((cp, index) => {
+                    const row = itemCautionTableBody.insertRow();
+                    
+                    // 題號
+                    row.insertCell().textContent = analysisResults.originalProblemIndices[index] + 1;
+                    
+                    // 答對百分比
+                    const originalProblemIdx = analysisResults.originalProblemIndices[index];
+                    let correctCount = 0;
+                    for (let i = 0; i < rawData.length; i++) {
+                        correctCount += rawData[i][originalProblemIdx];
+                    }
+                    const correctRate = (correctCount / rawData.length * 100).toFixed(1);
+                    const correctRateCell = row.insertCell();
+                    correctRateCell.textContent = correctRate + '%';
+                    
+                    // CP值
+                    const cpCell = row.insertCell();
+                    cpCell.textContent = cp;
+                    
+                    // CP值顏色標示
+                    const cpValue = parseFloat(cp);
+                    if (cpValue >= 0.75) {
+                        cpCell.style.backgroundColor = "#ffcccc";
+                        cpCell.style.color = "#721c24";
+                        cpCell.style.fontWeight = "bold";
+                    } else if (cpValue >= 0.5) {
+                        cpCell.style.backgroundColor = "#fff3cd";
+                        cpCell.style.color = "#856404";
+                        cpCell.style.fontWeight = "bold";
+                    } else {
+                        cpCell.style.backgroundColor = "#d4edda";
+                        cpCell.style.color = "#155724";
+                    }
+                    
+                    // 品質評估
+                    const qualityCell = row.insertCell();
+                    const correctRateValue = parseFloat(correctRate);
+                    
+                    if (cpValue < 0.5 && correctRateValue > 50) {
+                        qualityCell.innerHTML = '🟢 可用於區分低成就學生';
+                        qualityCell.style.color = '#155724';
+                    } else if (cpValue >= 0.5 && correctRateValue > 50) {
+                        qualityCell.innerHTML = '🟡 建議局部編修試題';
+                        qualityCell.style.color = '#856404';
+                    } else if (cpValue < 0.5 && correctRateValue <= 50) {
+                        qualityCell.innerHTML = '🔵 可用於區分高成就學生';
+                        qualityCell.style.color = '#0c5460';
+                    } else {
+                        qualityCell.innerHTML = '🔴 建議重新編修試題';
+                        qualityCell.style.color = '#721c24';
+                    }
+                });
+
+                const itemAnalysisTableBody = document.querySelector('#itemAnalysisTable tbody');
+                itemAnalysisTableBody.innerHTML = '';
+                analysisResults.itemAnalysis.forEach((item) => {
+                    const row = itemAnalysisTableBody.insertRow();
+                    row.insertCell().textContent = item.problemNumber;
+                    
+                    const difficultyCell = row.insertCell();
+                    difficultyCell.textContent = item.difficulty;
+                    
+                    const discriminationCell = row.insertCell();
+                    discriminationCell.textContent = item.discrimination;
+                    
+                    const difficultyLabelCell = row.insertCell();
+                    difficultyLabelCell.textContent = item.difficultyLabel;
+                    if (item.difficultyLabel === "很容易" || item.difficultyLabel === "很困難") {
+                        difficultyLabelCell.style.color = "#dc3545";
+                    } else if (item.difficultyLabel === "中等") {
+                        difficultyLabelCell.style.color = "#28a745";
+                    } else {
+                        difficultyLabelCell.style.color = "#ffc107";
+                    }
+                    
+                    const discriminationLabelCell = row.insertCell();
+                    discriminationLabelCell.textContent = item.discriminationLabel;
+                    if (item.discriminationLabel === "很好" || item.discriminationLabel === "好") {
+                        discriminationLabelCell.style.color = "#28a745";
+                    } else if (item.discriminationLabel === "可接受") {
+                        discriminationLabelCell.style.color = "#ffc107";
+                    } else {
+                        discriminationLabelCell.style.color = "#dc3545";
+                    }
+                });
+
+                const studentCautionTableBody = document.querySelector('#studentCautionTable tbody');
+                studentCautionTableBody.innerHTML = '';
+                analysisResults.studentCautionIndices.forEach((cs, index) => {
+                    const row = studentCautionTableBody.insertRow();
+                    
+                    // 學生編號
+                    row.insertCell().textContent = analysisResults.originalStudentIndices[index] + 1;
+                    
+                    // 得分百分比
+                    const originalStudentIdx = analysisResults.originalStudentIndices[index];
+                    let correctCount = 0;
+                    for (let j = 0; j < rawData[0].length; j++) {
+                        correctCount += rawData[originalStudentIdx][j];
+                    }
+                    const scoreRate = (correctCount / rawData[0].length * 100).toFixed(1);
+                    const scoreRateCell = row.insertCell();
+                    scoreRateCell.textContent = scoreRate + '%';
+                    
+                    // CS值
+                    const csCell = row.insertCell();
+                    csCell.textContent = cs;
+                    
+                    // CS值顏色標示
+                    const csValue = parseFloat(cs);
+                    if (csValue >= 0.75) {
+                        csCell.style.backgroundColor = "#ffcccc";
+                        csCell.style.color = "#721c24";
+                        csCell.style.fontWeight = "bold";
+                    } else if (csValue >= 0.5) {
+                        csCell.style.backgroundColor = "#fff3cd";
+                        csCell.style.color = "#856404";
+                        csCell.style.fontWeight = "bold";
+                    } else {
+                        csCell.style.backgroundColor = "#d4edda";
+                        csCell.style.color = "#155724";
+                    }
+                    
+                    // 學生診斷
+                    const diagnosisCell = row.insertCell();
+                    const scoreRateValue = parseFloat(scoreRate);
+                    
+                    if (scoreRateValue > 75 && csValue < 0.5) {
+                        diagnosisCell.innerHTML = '🟢';
+                        diagnosisCell.style.color = '#155724';
+                    } else if (scoreRateValue > 75 && csValue >= 0.5) {
+                        diagnosisCell.innerHTML = '🟡';
+                        diagnosisCell.style.color = '#856404';
+                    } else if (scoreRateValue >= 50 && scoreRateValue <= 75 && csValue < 0.5) {
+                        diagnosisCell.innerHTML = '🔵';
+                        diagnosisCell.style.color = '#0c5460';
+                    } else if (scoreRateValue >= 50 && scoreRateValue <= 75 && csValue >= 0.5) {
+                        diagnosisCell.innerHTML = '🟠';
+                        diagnosisCell.style.color = '#fd7e14';
+                    } else if (scoreRateValue < 50 && csValue < 0.5) {
+                        diagnosisCell.innerHTML = '🟣';
+                        diagnosisCell.style.color = '#6f42c1';
+                    } else {
+                        diagnosisCell.innerHTML = '🔴';
+                        diagnosisCell.style.color = '#721c24';
+                    }
+                });
+
+                const spTableHeader = document.querySelector('#spTable thead');
+                const spTableBody = document.querySelector('#spTable tbody');
+                spTableHeader.innerHTML = '';
+                spTableBody.innerHTML = '';
+
+                let headerRow = spTableHeader.insertRow();
+                headerRow.insertCell().textContent = '學生/題目';
+                analysisResults.originalProblemIndices.forEach(originalProblemIndex => {
+                    headerRow.insertCell().textContent = `Q${originalProblemIndex + 1}`;
+                });
+                headerRow.insertCell().textContent = '總分';
+
+                analysisResults.sortedData.forEach((studentRow, studentIdx) => {
+                    const row = spTableBody.insertRow();
+                    const originalStudentId = analysisResults.originalStudentIndices[studentIdx] + 1;
+                    row.insertCell().textContent = `S${originalStudentId}`;
+                    let studentScore = 0;
+
+                    studentRow.forEach((answer, problemIdx) => {
+                        const cell = row.insertCell();
+                        cell.textContent = answer;
+                        studentScore += answer;
+
+                        cell.classList.remove('sp-boundary-s', 'sp-boundary-p', 'sp-boundary-s-horizontal', 'sp-boundary-p-vertical');
+
+                        if (answer === 1) {
+                            cell.classList.add('sp-cell-1');
+                        } else {
+                            cell.classList.add('sp-cell-0');
+                        }
+
+                        const currentStudentPerfectScore = analysisResults.sortedStudentScores[studentIdx];
+
+                        if (problemIdx === currentStudentPerfectScore - 1 && currentStudentPerfectScore > 0) {
+                            cell.classList.add('sp-boundary-s');
+                        }
+
+                        if (studentIdx < analysisResults.students - 1) {
+                            const nextStudentPerfectScore = analysisResults.sortedStudentScores[studentIdx + 1];
+
+                            if (problemIdx >= nextStudentPerfectScore && problemIdx < currentStudentPerfectScore) {
+                                cell.classList.add('sp-boundary-s-horizontal');
+                            }
+                        }
+
+                        const currentProblemPerfectScore = analysisResults.sortedProblemScores[problemIdx];
+
+                        if (studentIdx === currentProblemPerfectScore - 1 && currentProblemPerfectScore > 0) {
+                            cell.classList.add('sp-boundary-p');
+                        }
+
+                        if (problemIdx < analysisResults.problems - 1) {
+                            const nextProblemPerfectScore = analysisResults.sortedProblemScores[problemIdx + 1];
+
+                             if (studentIdx >= nextProblemPerfectScore && studentIdx < currentProblemPerfectScore) {
+                                cell.classList.add('sp-boundary-p-vertical');
+                            }
+                        }
+
+                        let idealSResponse = (problemIdx < currentStudentPerfectScore) ? 1 : 0;
+                        let idealPResponse = (studentIdx < currentProblemPerfectScore) ? 1 : 0;
+                        
+                        // 如果偏離任一理想模式就標示為偏離
+                        if (answer !== idealSResponse || answer !== idealPResponse) {
+                            cell.classList.add('deviation');
+                        }
+                    });
+                    row.insertCell().textContent = studentScore;
+                });
+
+                let problemTotalRow = spTableBody.insertRow();
+                problemTotalRow.insertCell().textContent = '總分';
+                const problems = analysisResults.sortedData[0].length;
+                for (let j = 0; j < problems; j++) {
+                    let colSum = 0;
+                    for (let i = 0; i < analysisResults.sortedData.length; i++) {
+                        colSum += analysisResults.sortedData[i][j];
+                    }
+                    problemTotalRow.insertCell().textContent = colSum;
+                }
+                problemTotalRow.insertCell().textContent = '';
+
+                resultsDiv.style.display = 'block';
+
+                const collapsibles = document.querySelectorAll('.collapsible');
+                collapsibles.forEach(collapsible => {
+                    collapsible.addEventListener('click', function() {
+                        this.classList.toggle('active');
+                        const content = this.nextElementSibling;
+                        content.classList.toggle('active');
+                    });
+                });
+
+            } catch (error) {
+                errorMessagesDiv.textContent = `錯誤：${error.message}`;
+                errorMessagesDiv.style.display = 'block';
+                resultsDiv.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
+                
