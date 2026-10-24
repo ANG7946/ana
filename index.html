@@ -30,7 +30,7 @@
           <span>📊 VOSviewer & SNA 知識結構分析工作台</span>
           <span class="text-xs font-normal bg-emerald-600 text-white px-2.5 py-0.5 rounded-full">支援 WoS Tab-delimited / Plain Text & Scopus</span>
         </h1>
-        <p class="text-xs text-slate-300 mt-1">跨庫去重 ➔ 智慧單複數 ➔ 同義詞整併 ➔ 社會網路分析 (SNA) ➔ VOSviewer 無縫對接</p>
+        <p class="text-xs text-slate-300 mt-1">跨庫重複文獻剔除 ➔ 智慧單複數 ➔ 同義詞整併 ➔ 社會網路分析 (SNA) ➔ VOSviewer 無縫對接</p>
       </div>
       <div class="flex items-center gap-2 text-xs flex-wrap">
         <button onclick="openTermModal('all')" class="bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 rounded font-semibold transition flex items-center gap-1.5 shadow-sm">
@@ -52,7 +52,7 @@
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <h3 id="glossaryModalTitle" class="text-lg font-bold text-slate-900">📖 書目計量與社會網路分析 (SNA) 核心術語小辭典</h3>
-          <p class="text-xs text-slate-500 mt-0.5">點擊網頁中任何帶有虛線的專業術語，皆可隨時調閱此學術定義與論文詮釋指南</p>
+          <p class="text-xs text-slate-500 mt-0.5">點選網頁中任何帶有虛線的專業術語，皆可隨時調閱此學術定義與論文詮釋指南</p>
         </div>
         <button onclick="closeTermModal()" class="text-slate-400 hover:text-slate-700 text-xl font-bold p-2">✕</button>
       </div>
@@ -208,7 +208,7 @@
     </aside>
   </div>
 
-  <!-- 文獻明細面板：點擊節點、連線或指標報表列時開啟 -->
+  <!-- 文獻明細面板：點選節點、連線或指標報表列時開啟 -->
   <aside id="docPanel" class="fixed top-0 bottom-0 right-0 z-[70] w-[460px] max-w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col hidden" aria-label="文獻明細">
     <div class="px-4 pt-3 pb-3 border-b border-slate-200 space-y-2">
       <div class="flex items-start justify-between gap-2">
@@ -324,7 +324,7 @@
             <svg class="w-10 h-10 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
             </svg>
-            <p class="text-sm font-semibold text-slate-700">點擊選擇檔案，或將檔案拖曳至此</p>
+            <p class="text-sm font-semibold text-slate-700">點選選擇檔案，或將檔案拖曳至此</p>
             <p class="text-xs text-slate-500 mt-1">完美支援 <b>WoS Tab-delimited (.txt)</b>、<b>WoS Plain Text (.txt)</b> 與 <b>Scopus (.csv)</b></p>
             <input type="file" id="fileInput" multiple accept=".csv,.txt,.tsv" class="hidden">
           </label>
@@ -349,7 +349,7 @@
               <label class="block text-xs font-bold text-slate-700 mb-1.5">⚙️ 自動化前處理輔助功能</label>
               <label class="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
                 <input type="checkbox" id="chkDeduplicate" checked class="mt-0.5 rounded text-indigo-600">
-                <span><b>自動跨檔跨庫去重</b>（比對 DOI 與標題特徵碼）</span>
+                <span><b>自動剔除跨檔跨庫重複文獻</b>（比對 DOI 與標題特徵碼）</span>
               </label>
               <label class="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
                 <input type="checkbox" id="chkAutoLemma" checked class="mt-0.5 rounded text-indigo-600">
@@ -383,7 +383,7 @@
           <div id="statSourceBreakdown" class="text-[11px] text-slate-400">WoS: 0 / Scopus: 0</div>
         </div>
         <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-          <div class="text-[11px] text-slate-500">去重後有效文獻</div>
+          <div class="text-[11px] text-slate-500">剔除重複後有效文獻</div>
           <div id="statValidDocs" class="text-lg font-bold text-indigo-700 mt-0.5">0</div>
           <div id="statRemovedCount" class="text-[11px] text-slate-400">已剔除重複: 0 篇</div>
         </div>
@@ -493,7 +493,7 @@
             社會網路分析 (SNA) 中心性指標與 VOS 互動圖譜預覽
           </h2>
           <p class="text-xs text-slate-500 mt-1">
-            點擊專業術語即可查看學術解釋：
+            點選專業術語即可查看學術解釋：
             <span class="term-help mx-1" onclick="openTermModal('cooccurrence')">共現矩陣 [?]</span> ·
             <span class="term-help mx-1" onclick="openTermModal('tls')">總連結強度 (TLS) [?]</span> ·
             <span class="term-help mx-1" onclick="openTermModal('betweenness')">中介中心性 [?]</span> ·
@@ -561,7 +561,7 @@
         <!-- Left: SNA Metrics Top Table -->
         <div class="lg:col-span-6 flex flex-col justify-between space-y-2">
           <div class="text-xs font-bold text-slate-700 flex items-center justify-between">
-            <span>🏆 關鍵字拓撲與中心性指標報表 <span class="font-normal text-slate-500">（點擊列可查看文獻）</span></span>
+            <span>🏆 關鍵字拓撲與中心性指標報表 <span class="font-normal text-slate-500">（點選列可查看文獻）</span></span>
             <span id="snaMacroStats" class="text-[11px] font-normal text-slate-500">節點數: 0 | 連線數: 0 | 網路密度: 0</span>
           </div>
           <div class="table-container border border-slate-200 rounded-lg h-[420px]">
@@ -589,7 +589,7 @@
         <!-- Right: Canvas Network Preview -->
         <div class="lg:col-span-6 flex flex-col space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-700">🌐 互動式共字網路圖 (點擊節點或連線可查看文獻)</span>
+            <span class="text-xs font-bold text-slate-700">🌐 互動式共字網路圖 (點選節點或連線可查看文獻)</span>
             <div class="flex items-center gap-2">
             <button id="btnOpenFullscreen" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white text-[11px] font-semibold transition" disabled>🔍 展開全螢幕大圖</button>
             <div class="inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5 text-[11px]">
@@ -620,8 +620,8 @@
         <div class="md:col-span-6 text-xs text-slate-600 space-y-1.5 leading-relaxed">
           <p>🎯 <b>對接 VOSviewer 操作指引（方案 A）：</b></p>
           <ol class="list-decimal pl-5 space-y-1">
-            <li>點擊右側綠色按鈕下載 <b>Scopus 專用 CSV 檔</b>（無論原始檔案為 WoS 或 Scopus，系統皆已完美轉譯為 VOSviewer 支援的 Scopus 欄位結構，並附帶 UTF-8 BOM 防亂碼標記）。</li>
-            <li>打開桌面版 VOSviewer ➔ 點選 <b>Create</b> ➔ <b>Create a map based on bibliographic data</b> ➔ <b>Read data from bibliographic database files</b> ➔ 選擇 <b>Scopus</b> 分頁匯入該 CSV 檔即可。</li>
+            <li>點選右側綠色按鈕下載 <b>Scopus 專用 CSV 檔</b>（無論原始檔案為 WoS 或 Scopus，系統皆已完美轉譯為 VOSviewer 支援的 Scopus 欄位結構，並附帶 UTF-8 BOM 防亂碼標記）。</li>
+            <li>開啟桌面版 VOSviewer ➔ 點選 <b>Create</b> ➔ <b>Create a map based on bibliographic data</b> ➔ <b>Read data from bibliographic database files</b> ➔ 選擇 <b>Scopus</b> 分頁匯入該 CSV 檔即可。</li>
           </ol>
         </div>
 
@@ -670,7 +670,7 @@
     /********************************************************************
      * 版本資訊：每次發布新版本時，只需修改這兩個常數（頁尾會自動更新）
      ********************************************************************/
-    const APP_VERSION = '5.6';
+    const APP_VERSION = '5.7';
     const APP_UPDATED = '2026-10-24';
     document.getElementById('appVersion').textContent = APP_VERSION;
     document.getElementById('appUpdated').textContent = APP_UPDATED;
@@ -1031,7 +1031,7 @@
     }
 
     /********************************************************************
-     * 去重與智慧單複數還原
+     * 重複文獻剔除與智慧單複數還原
      ********************************************************************/
     function deduplicateDocuments(docs) {
       if (!document.getElementById('chkDeduplicate').checked) return [...docs];
@@ -1791,7 +1791,7 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-indigo-50 cursor-pointer';
         tr.dataset.term = n.id;
-        tr.title = '點擊查看構成此節點的文獻';
+        tr.title = '點選查看構成此節點的文獻';
         tr.innerHTML = `
           <td class="py-2 px-2.5 text-center text-slate-400 font-bold">${idx + 1}</td>
           <td class="py-2 px-2.5 font-semibold text-slate-800">${escapeHtml(n.id)}</td>
@@ -1878,7 +1878,7 @@
         .attr('stroke-opacity', 0.45)
         .attr('stroke-width', d => Math.min(1 + Math.sqrt(d.weight) * 1.2, 6));
 
-      // 透明的加寬點擊區，讓細連線也容易點到
+      // 透明的加寬點選區，讓細連線也容易點到
       const linkHit = g.append('g')
         .selectAll('line')
         .data(d3Links)
@@ -1889,7 +1889,7 @@
         .on('click', (event, l) => { event.stopPropagation(); openDocPanelForLink(l.source.index, l.target.index); })
         .on('mouseenter', function () { d3.select(this).attr('stroke', 'rgba(56,189,248,0.35)'); })
         .on('mouseleave', function () { d3.select(this).attr('stroke', 'transparent'); });
-      linkHit.append('title').text(l => `${l.source.id} ↔ ${l.target.id}\n共現 ${l.weight} 篇（點擊查看文獻）`);
+      linkHit.append('title').text(l => `${l.source.id} ↔ ${l.target.id}\n共現 ${l.weight} 篇（點選查看文獻）`);
 
       const node = g.append('g')
         .selectAll('g')
@@ -1928,7 +1928,7 @@
       node.append('title')
         .text(d => `${d.id}\n出現篇數: ${d.occurrences}\n總連結強度 (TLS): ${d.tls}\n中介中心性: ${d.betweenness}\n平均發表年份: ${d.avgYear ?? '無年份資料'}`);
 
-      // 滑鼠懸停高亮鄰居節點與連線
+      // 滑鼠懸停時醒目標示鄰居節點與連線
       const neighborSet = new Set();
       d3Links.forEach(l => {
         neighborSet.add(`${l.source.index}-${l.target.index}`);
@@ -2427,7 +2427,7 @@
         .on('click', (e, l) => { e.stopPropagation(); openDocPanelForLink(l.source.index, l.target.index); })
         .on('mouseenter', function () { d3.select(this).attr('stroke', o.theme === 'dark' ? 'rgba(56,189,248,0.35)' : 'rgba(79,70,229,0.25)'); })
         .on('mouseleave', function () { d3.select(this).attr('stroke', 'transparent'); });
-      FS.hitSel.select('title').text(l => `${l.source.id} ↔ ${l.target.id}\n共現 ${l.weight} 篇（點擊查看文獻）`);
+      FS.hitSel.select('title').text(l => `${l.source.id} ↔ ${l.target.id}\n共現 ${l.weight} 篇（點選查看文獻）`);
 
       const drag = d3.drag()
         .on('start', (e, d) => { if (!e.active) FS.sim.alphaTarget(0.2).restart(); d.fx = d.x; d.fy = d.y; })
