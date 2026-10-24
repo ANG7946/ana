@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VOSviewer 共字分析與 SNA 整合工作台 (WoS & Scopus)</title>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS v3.4.19（預先編譯，僅含本程式用到的樣式） -->
+  <link rel="stylesheet" href="css/tailwind.min.css">
   <!-- PapaParse for fast CSV/TSV parsing -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="lib/papaparse.min.js"></script>
   <!-- D3.js for Network Visualization & Force Simulation -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="lib/d3.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif; }
     .table-container { max-height: 480px; overflow-y: auto; }
@@ -62,8 +62,246 @@
       </div>
 
       <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
-        <button onclick="openTermModal('all')" id="btnShowAllTerms" class="text-xs text-indigo-600 hover:underline font-semibold hidden">顯示全部 6 個核心學術名詞</button>
+        <button onclick="openTermModal('all')" id="btnShowAllTerms" class="text-xs text-indigo-600 hover:underline font-semibold hidden">顯示全部核心學術名詞</button>
         <button onclick="closeTermModal()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs px-5 py-2 rounded-lg font-semibold transition ml-auto">了解，關閉視窗</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全螢幕大圖模式 (Full-screen Network Studio) -->
+  <div id="fsModal" class="fixed inset-0 z-[60] hidden flex bg-slate-900" role="dialog" aria-modal="true" aria-label="全螢幕共字網路圖">
+    <div id="fsCanvasWrap" class="relative flex-1 min-w-0">
+      <svg id="fsSvg" class="w-full h-full block cursor-grab"></svg>
+      <div class="absolute top-3 left-3 flex gap-2 text-[11px]">
+        <button id="fsBtnFit" class="bg-white/90 hover:bg-white text-slate-800 px-2.5 py-1.5 rounded-lg shadow font-semibold">⤢ 置中縮放</button>
+        <button id="fsBtnRelayout" class="bg-white/90 hover:bg-white text-slate-800 px-2.5 py-1.5 rounded-lg shadow font-semibold">↻ 重新佈局（保留固定節點）</button>
+        <button id="fsBtnUnpinAll" class="bg-white/90 hover:bg-white text-slate-800 px-2.5 py-1.5 rounded-lg shadow font-semibold">📌 解除全部固定</button>
+      </div>
+      <div class="absolute top-3 right-3 text-[11px] bg-white/90 text-slate-700 px-3 py-1.5 rounded-lg shadow pointer-events-none">
+        滾輪縮放 · 拖曳畫布平移 · 拖曳節點固定位置（紅點標記）· 雙擊節點解除固定
+      </div>
+    </div>
+
+    <aside class="w-80 shrink-0 bg-white border-l border-slate-200 overflow-y-auto text-xs text-slate-700 flex flex-col">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 sticky top-0 bg-white z-10">
+        <h3 class="font-bold text-sm text-slate-900">🖼️ 大圖版面與匯出</h3>
+        <button id="fsBtnClose" class="text-slate-400 hover:text-slate-800 text-lg font-bold px-2" title="關閉 (Esc)">✕</button>
+      </div>
+
+      <div class="p-4 space-y-5">
+        <fieldset class="space-y-2">
+          <legend class="font-bold text-slate-900 mb-1">外觀</legend>
+          <label class="flex items-center justify-between gap-2">配色主題
+            <select id="fsTheme" class="fs-ctl border border-slate-300 rounded px-2 py-1 w-40">
+              <option value="light" selected>學術白底（印刷用）</option>
+              <option value="dark">深色（簡報展示）</option>
+            </select>
+          </label>
+          <label class="flex items-center justify-between gap-2">節點著色
+            <select id="fsColorMode" class="fs-ctl border border-slate-300 rounded px-2 py-1 w-40">
+              <option value="cluster">Louvain 聚落</option>
+              <option value="overlay">平均發表年份</option>
+            </select>
+          </label>
+          <label class="flex items-center justify-between gap-2">年份色階
+            <select id="fsYearPalette" class="fs-ctl border border-slate-300 rounded px-2 py-1 w-40">
+              <option value="viridis" selected>Viridis（色盲友善）</option>
+              <option value="turbo">Turbo（與預覽圖相同）</option>
+            </select>
+          </label>
+          <label class="flex items-center justify-between gap-2">字型
+            <select id="fsFont" class="fs-ctl border border-slate-300 rounded px-2 py-1 w-40">
+              <option value="arial" selected>Arial / Helvetica</option>
+              <option value="times">Times New Roman</option>
+              <option value="noto">Noto Sans TC（含中文）</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset class="space-y-2">
+          <legend class="font-bold text-slate-900 mb-1">版面配置</legend>
+          <label class="block">節點排斥力 <span id="fsChargeVal" class="float-right text-slate-500"></span>
+            <input id="fsCharge" type="range" min="50" max="1500" step="10" value="260" class="fs-ctl fs-layout w-full">
+          </label>
+          <label class="block">連線長度 <span id="fsLinkDistVal" class="float-right text-slate-500"></span>
+            <input id="fsLinkDist" type="range" min="20" max="300" step="5" value="90" class="fs-ctl fs-layout w-full">
+          </label>
+          <label class="block">節點大小倍率 <span id="fsNodeScaleVal" class="float-right text-slate-500"></span>
+            <input id="fsNodeScale" type="range" min="0.5" max="2.5" step="0.1" value="1" class="fs-ctl fs-layout w-full">
+          </label>
+          <label class="flex items-start gap-2"><input id="fsLabelAvoid" type="checkbox" checked class="fs-ctl fs-layout mt-0.5">
+            <span>標籤避讓（依文字寬度加大節點間距，減少文字重疊）</span></label>
+          <label class="flex items-start gap-2"><input id="fsPinOnDrag" type="checkbox" checked class="fs-ctl mt-0.5">
+            <span>拖曳後固定節點位置</span></label>
+        </fieldset>
+
+        <fieldset class="space-y-2">
+          <legend class="font-bold text-slate-900 mb-1">關鍵字標籤</legend>
+          <label class="block">基準字級 <span id="fsFontSizeVal" class="float-right text-slate-500"></span>
+            <input id="fsFontSize" type="range" min="6" max="28" step="1" value="11" class="fs-ctl fs-layout w-full">
+          </label>
+          <label class="flex items-center justify-between gap-2">僅顯示出現篇數 ≥
+            <input id="fsLabelMin" type="number" min="1" value="1" class="fs-ctl fs-layout w-16 border border-slate-300 rounded px-2 py-1 text-center font-semibold">
+          </label>
+          <div id="fsLabelCount" class="text-[11px] text-slate-500"></div>
+          <label class="flex items-start gap-2"><input id="fsFontScale" type="checkbox" checked class="fs-ctl fs-layout mt-0.5">
+            <span>字級隨出現篇數放大</span></label>
+          <label class="flex items-start gap-2"><input id="fsHalo" type="checkbox" checked class="fs-ctl mt-0.5">
+            <span>文字加底色描邊（提升與連線交疊處的可讀性）</span></label>
+        </fieldset>
+
+        <fieldset class="space-y-2">
+          <legend class="font-bold text-slate-900 mb-1">連線</legend>
+          <label class="flex items-start gap-2"><input id="fsCurved" type="checkbox" checked class="fs-ctl mt-0.5">
+            <span>弧形連線（VOSviewer 風格）</span></label>
+          <label class="flex items-start gap-2"><input id="fsLinkCluster" type="checkbox" checked class="fs-ctl mt-0.5">
+            <span>聚落內連線依聚落著色</span></label>
+          <label class="block">連線不透明度 <span id="fsLinkOpacityVal" class="float-right text-slate-500"></span>
+            <input id="fsLinkOpacity" type="range" min="0.05" max="1" step="0.05" value="0.35" class="fs-ctl w-full">
+          </label>
+          <label class="flex items-center justify-between gap-2">僅顯示共現次數 ≥
+            <input id="fsLinkMinW" type="number" min="1" value="1" class="fs-ctl w-16 border border-slate-300 rounded px-2 py-1 text-center font-semibold">
+          </label>
+          <div id="fsLinkCount" class="text-[11px] text-slate-500"></div>
+        </fieldset>
+
+        <fieldset class="space-y-2">
+          <legend class="font-bold text-slate-900 mb-1">結構橋樑標示</legend>
+          <label class="block">中介中心性前 N 名加外環 <span id="fsBrokersVal" class="float-right text-slate-500"></span>
+            <input id="fsBrokers" type="range" min="0" max="15" step="1" value="5" class="fs-ctl w-full">
+          </label>
+          <div id="fsBrokerList" class="text-[11px] text-slate-500 leading-relaxed"></div>
+        </fieldset>
+
+        <fieldset class="space-y-2">
+          <legend class="font-bold text-slate-900 mb-1">圖例與標題</legend>
+          <label class="flex items-start gap-2"><input id="fsShowLegend" type="checkbox" checked class="fs-ctl mt-0.5"><span>嵌入圖例</span></label>
+          <label class="flex items-start gap-2"><input id="fsShowStats" type="checkbox" checked class="fs-ctl mt-0.5"><span>嵌入網路指標（節點、連線、密度、聚落數、Q 值）</span></label>
+          <label class="flex items-center justify-between gap-2">圖例語言
+            <select id="fsLegendLang" class="fs-ctl border border-slate-300 rounded px-2 py-1 w-40">
+              <option value="en" selected>English（投稿用）</option>
+              <option value="zh">繁體中文</option>
+            </select>
+          </label>
+          <input id="fsTitle" type="text" placeholder="圖片標題（選填，期刊投稿通常留白）" class="fs-ctl w-full border border-slate-300 rounded px-2 py-1.5">
+        </fieldset>
+
+        <fieldset class="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3">
+          <legend class="font-bold text-slate-900 px-1">匯出圖片</legend>
+          <label class="flex items-center justify-between gap-2">PNG 放大倍率
+            <select id="fsPngScale" class="fs-ctl border border-slate-300 rounded px-2 py-1 w-24">
+              <option value="2">2×</option>
+              <option value="3">3×</option>
+              <option value="4" selected>4×</option>
+              <option value="6">6×</option>
+            </select>
+          </label>
+          <label class="flex items-start gap-2"><input id="fsTransparent" type="checkbox" class="fs-ctl mt-0.5"><span>透明背景</span></label>
+          <div id="fsExportInfo" class="text-[11px] text-slate-500 leading-relaxed"></div>
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button id="fsBtnSvg" class="bg-slate-700 hover:bg-slate-800 text-white font-semibold py-2 rounded-lg">⬇ SVG 向量圖</button>
+            <button id="fsBtnPng" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-lg">⬇ PNG（300 DPI）</button>
+          </div>
+          <p class="text-[11px] text-slate-500 leading-relaxed">匯出範圍為整張網路圖（不受目前縮放影響）。PNG 已寫入 300 DPI 解析度標記，插入 Word 時會依此換算實際尺寸。</p>
+        </fieldset>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 文獻明細面板：點擊節點、連線或指標報表列時開啟 -->
+  <aside id="docPanel" class="fixed top-0 bottom-0 right-0 z-[70] w-[460px] max-w-full bg-white border-l border-slate-200 shadow-2xl flex flex-col hidden" aria-label="文獻明細">
+    <div class="px-4 pt-3 pb-3 border-b border-slate-200 space-y-2">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <div id="docPanelKind" class="text-[11px] font-semibold text-indigo-600"></div>
+          <h3 id="docPanelTitle" class="text-sm font-bold text-slate-900 break-words"></h3>
+        </div>
+        <button id="docPanelClose" class="text-slate-400 hover:text-slate-800 text-lg font-bold px-2 shrink-0" title="關閉 (Esc)">✕</button>
+      </div>
+      <div id="docPanelMeta" class="flex flex-wrap items-center gap-1.5 text-[11px]"></div>
+      <div class="flex items-center justify-between gap-2 pt-1">
+        <label class="text-[11px] text-slate-600 flex items-center gap-1.5">排序
+          <select id="docPanelSort" class="border border-slate-300 rounded px-2 py-1 text-[11px]">
+            <option value="year_desc" selected>年份（新 → 舊）</option>
+            <option value="year_asc">年份（舊 → 新）</option>
+            <option value="cited_desc">被引次數（多 → 少）</option>
+            <option value="author">第一作者（A → Z）</option>
+          </select>
+        </label>
+        <button id="docPanelCsv" class="bg-slate-700 hover:bg-slate-800 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg">⬇ 下載此清單 (.csv)</button>
+      </div>
+    </div>
+    <ol id="docPanelList" class="flex-1 overflow-y-auto divide-y divide-slate-100 text-xs"></ol>
+    <div class="px-4 py-2 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
+      黃色標籤表示該文獻是透過同義詞替換或單複數歸併而歸入此節點。被引次數為匯出當時的資料庫數值。
+    </div>
+  </aside>
+
+  <!-- 分群敏感度分析視窗 -->
+  <div id="sensModal" class="fixed inset-0 z-[65] bg-slate-900/60 backdrop-blur-sm hidden flex items-start justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label="分群敏感度分析">
+    <div class="bg-white rounded-2xl w-full max-w-5xl shadow-2xl border border-slate-200 my-6">
+      <div class="flex items-start justify-between px-6 py-4 border-b border-slate-100">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900">🧪 分群敏感度分析</h3>
+          <p class="text-xs text-slate-500 mt-0.5">改變分群設定後重新分群，檢查主要聚落是否依然存在。每組設定都會各自執行 100 次穩定性檢驗。
+            <span class="term-help" onclick="openTermModal('sensitivity')">說明 [?]</span></p>
+        </div>
+        <button id="sensClose" class="text-slate-400 hover:text-slate-700 text-xl font-bold p-2" title="關閉 (Esc)">✕</button>
+      </div>
+
+      <div class="px-6 py-4 grid grid-cols-1 md:grid-cols-12 gap-4 text-xs border-b border-slate-100 bg-slate-50/60">
+        <div class="md:col-span-4 space-y-1">
+          <label class="font-bold text-slate-700 block" for="sensGammas">解析度 γ（以逗號分隔）</label>
+          <input id="sensGammas" type="text" value="0.6, 0.8, 1.0, 1.2, 1.4, 1.6" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white">
+        </div>
+        <div class="md:col-span-3 space-y-1">
+          <span class="font-bold text-slate-700 block">分群邊權重</span>
+          <label class="flex items-center gap-1.5"><input id="sensWAssoc" type="checkbox" checked> Association strength</label>
+          <label class="flex items-center gap-1.5"><input id="sensWRaw" type="checkbox"> 原始共現次數</label>
+        </div>
+        <div class="md:col-span-3 space-y-1">
+          <label class="font-bold text-slate-700 block" for="sensMinOccs">入圖門檻（篇數，以逗號分隔）</label>
+          <input id="sensMinOccs" type="text" value="2" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white">
+          <p class="text-[11px] text-slate-500">改變門檻時，只比較兩種設定共同包含的關鍵字</p>
+        </div>
+        <div class="md:col-span-2 flex flex-col justify-end gap-1.5">
+          <button id="sensRun" class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-semibold px-4 py-2 rounded-lg">▶ 執行分析</button>
+          <div id="sensProgress" class="text-[11px] text-slate-500 h-4"></div>
+        </div>
+        <div id="sensRefInfo" class="md:col-span-12 text-[11px] text-slate-600"></div>
+      </div>
+
+      <div id="sensResults" class="px-6 py-5 space-y-5 text-xs hidden">
+        <div id="sensSummary" class="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-indigo-950 leading-relaxed"></div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-bold text-slate-800 text-sm">設定比較表</h4>
+            <button id="sensCsvConfigs" class="bg-slate-700 hover:bg-slate-800 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg">⬇ 下載比較表 (.csv)</button>
+          </div>
+          <div class="border border-slate-200 rounded-lg overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-50 text-slate-600">
+                <tr>
+                  <th class="py-2 px-2.5">邊權重</th><th class="py-2 px-2 text-right">γ</th><th class="py-2 px-2 text-right">門檻</th>
+                  <th class="py-2 px-2 text-right">節點數</th><th class="py-2 px-2 text-right">聚落數</th><th class="py-2 px-2 text-right">Q</th>
+                  <th class="py-2 px-2 text-right" title="同一設定下 100 次隨機順序重複的平均 ARI">穩定性 ARI</th>
+                  <th class="py-2 px-2 text-right" title="與目前分群的調整蘭德指數，以兩者共同的關鍵字計算">與目前分群的 ARI</th>
+                  <th class="py-2 px-2.5 text-right">共同節點</th>
+                </tr>
+              </thead>
+              <tbody id="sensConfigBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-bold text-slate-800 text-sm">各聚落的核心與邊界關鍵字 <span class="font-normal text-slate-500">（依目前分群，跨設定一致度 ≥ 0.70 為核心）</span></h4>
+            <button id="sensCsvKeywords" class="bg-slate-700 hover:bg-slate-800 text-white text-[11px] font-semibold px-3 py-1.5 rounded-lg">⬇ 下載關鍵字一致度 (.csv)</button>
+          </div>
+          <div id="sensClusterList" class="space-y-2"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -119,7 +357,7 @@
               </label>
               <label class="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
                 <input type="checkbox" id="chkCleanSic" checked class="mt-0.5 rounded text-indigo-600">
-                <span><b>自動過濾亂碼標籤与清理標點</b>（如自動剔除 WoS 中非英文字符產生的 <code class="bg-slate-200 px-1 rounded">(sic)</code> 異常關鍵字）</span>
+                <span><b>自動過濾亂碼標籤與清理標點</b>（如自動剔除 WoS 中非英文字符產生的 <code class="bg-slate-200 px-1 rounded">(sic)</code> 異常關鍵字）</span>
               </label>
             </div>
           </div>
@@ -244,30 +482,60 @@
 
     <!-- Step 3: SNA Metrics & Network Preview -->
     <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-100 pb-3 mb-4 gap-3">
+      <div class="border-b border-slate-100 pb-4 mb-4 space-y-3">
         <div>
           <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
             <span class="bg-slate-800 text-white w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">3</span>
             社會網路分析 (SNA) 中心性指標與 VOS 互動圖譜預覽
           </h2>
           <p class="text-xs text-slate-500 mt-1">
-            點擊右側專業術語即可查看學術解釋：
+            點擊專業術語即可查看學術解釋：
             <span class="term-help mx-1" onclick="openTermModal('cooccurrence')">共現矩陣 [?]</span> ·
             <span class="term-help mx-1" onclick="openTermModal('tls')">總連結強度 (TLS) [?]</span> ·
             <span class="term-help mx-1" onclick="openTermModal('betweenness')">中介中心性 [?]</span> ·
             <span class="term-help mx-1" onclick="openTermModal('louvain')">Louvain 自動分群 [?]</span> ·
+            <span class="term-help mx-1" onclick="openTermModal('stability')">分群穩定性 [?]</span> ·
             <span class="term-help mx-1" onclick="openTermModal('force')">力導向佈局 [?]</span>
           </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="flex items-center gap-1.5 text-xs bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-            <label class="font-medium text-slate-700">入圖最低出現篇數 ≥</label>
-            <input type="number" id="snaMinOccInput" value="2" min="1" max="100" class="w-14 text-xs border border-slate-300 rounded px-1.5 py-0.5 bg-white text-center font-bold text-indigo-700">
+        <!-- 分析設定工具列 -->
+        <div class="flex flex-wrap items-end gap-x-5 gap-y-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs">
+          <div class="space-y-1">
+            <div class="text-[11px] font-semibold text-slate-500">網路範圍</div>
+            <label class="flex items-center gap-2 h-8 text-slate-700" for="snaMinOccInput">
+              入圖門檻：出現篇數 ≥
+              <input type="number" id="snaMinOccInput" value="2" min="1" max="100" class="w-16 h-8 border border-slate-300 rounded-lg px-2 bg-white text-center font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </label>
           </div>
-          <button id="btnRunSna" class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-sm" disabled>
-            ⚡ 重新計算 SNA 與繪製網路圖
-          </button>
+
+          <div class="hidden md:block w-px self-stretch bg-slate-200"></div>
+
+          <div class="space-y-1">
+            <div class="text-[11px] font-semibold text-slate-500">分群設定</div>
+            <div class="flex flex-wrap items-center gap-3 text-slate-700">
+              <label class="flex items-center gap-2 h-8" for="clusterWeightSelect">
+                <span class="term-help" onclick="event.preventDefault(); openTermModal('assoc')">邊權重 [?]</span>
+                <select id="clusterWeightSelect" class="h-8 border border-slate-300 rounded-lg pl-2 pr-8 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="assoc" selected>Association strength 正規化</option>
+                  <option value="raw">原始共現次數</option>
+                </select>
+              </label>
+              <label class="flex items-center gap-2 h-8" for="clusterResolutionInput">
+                解析度 γ
+                <input type="number" id="clusterResolutionInput" value="1" min="0.1" max="5" step="0.1" class="w-16 h-8 border border-slate-300 rounded-lg px-2 bg-white text-center font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              </label>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 ml-auto">
+            <button id="btnOpenSens" class="h-9 px-3.5 rounded-lg bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:hover:bg-white text-indigo-700 border border-indigo-200 font-semibold transition" disabled>
+              🧪 敏感度分析
+            </button>
+            <button id="btnRunSna" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-semibold transition shadow-sm" disabled>
+              ⚡ 重新計算 SNA 與繪製網路圖
+            </button>
+          </div>
         </div>
       </div>
 
@@ -275,7 +543,7 @@
         <!-- Left: SNA Metrics Top Table -->
         <div class="lg:col-span-6 flex flex-col justify-between space-y-2">
           <div class="text-xs font-bold text-slate-700 flex items-center justify-between">
-            <span>🏆 關鍵字拓撲與中心性指標報表</span>
+            <span>🏆 關鍵字拓撲與中心性指標報表 <span class="font-normal text-slate-500">（點擊列可查看文獻）</span></span>
             <span id="snaMacroStats" class="text-[11px] font-normal text-slate-500">節點數: 0 | 連線數: 0 | 網路密度: 0</span>
           </div>
           <div class="table-container border border-slate-200 rounded-lg h-[420px]">
@@ -288,23 +556,28 @@
                   <th class="py-2 px-2 text-right">篇數</th>
                   <th class="py-2 px-2 text-right"><span class="term-help" onclick="openTermModal('tls')">TLS [?]</span></th>
                   <th class="py-2 px-2 text-right"><span class="term-help" onclick="openTermModal('degree')">度中心性 [?]</span></th>
-                  <th class="py-2 px-2.5 text-right"><span class="term-help" onclick="openTermModal('betweenness')">中介中心性 [?]</span></th>
+                  <th class="py-2 px-2 text-right"><span class="term-help" onclick="openTermModal('betweenness')">中介中心性 [?]</span></th>
+                  <th class="py-2 px-2.5 text-right"><span class="term-help" onclick="openTermModal('stability')">分群穩定度 [?]</span></th>
                 </tr>
               </thead>
               <tbody id="snaMetricsTableBody" class="divide-y divide-slate-100">
-                <tr><td colspan="7" class="py-16 text-center text-slate-400">載入文獻後將自動計算 SNA 指標並繪製共字網路圖</td></tr>
+                <tr><td colspan="8" class="py-16 text-center text-slate-400">載入文獻後將自動計算 SNA 指標並繪製共字網路圖</td></tr>
               </tbody>
             </table>
           </div>
+          <div id="snaStabilityNote" class="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 leading-relaxed hidden"></div>
         </div>
 
         <!-- Right: Canvas Network Preview -->
         <div class="lg:col-span-6 flex flex-col space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-700">🌐 互動式共字網路圖 (可滾輪縮放、拖曳節點、懸停高亮鄰居)</span>
+            <span class="text-xs font-bold text-slate-700">🌐 互動式共字網路圖 (點擊節點或連線可查看文獻)</span>
+            <div class="flex items-center gap-2">
+            <button id="btnOpenFullscreen" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white text-[11px] font-semibold transition" disabled>🔍 展開全螢幕大圖</button>
             <div class="inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5 text-[11px]">
               <button id="btnViewCluster" class="px-2.5 py-1 rounded-md bg-white text-slate-800 shadow-sm font-semibold transition">🎨 聚落分群圖</button>
               <button id="btnViewOverlay" class="px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 transition">🕒 年份演進圖 (Overlay)</button>
+            </div>
             </div>
           </div>
           <div class="border border-slate-200 rounded-lg bg-slate-950 relative h-[420px] overflow-hidden flex items-center justify-center" id="canvasContainer">
@@ -353,7 +626,37 @@
 
   </main>
 
+  <!-- 頁尾：工具資訊、開發者、AI 輔助聲明與授權 -->
+  <footer class="max-w-7xl mx-auto px-6 mt-8">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 px-6 py-5 text-xs text-slate-600">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="space-y-1">
+          <div class="text-sm font-bold text-slate-800">VOSviewer &amp; SNA 知識結構分析工作台</div>
+          <div class="text-slate-500">VOSviewer &amp; SNA Knowledge Structure Analysis Workbench</div>
+          <div class="text-slate-500">版本 <span id="appVersion"></span> · <span id="appUpdated"></span></div>
+        </div>
+        <div class="space-y-1">
+          <div class="text-[11px] font-semibold text-slate-500">開發者 Developer</div>
+          <div class="text-slate-800"><b>林祖強</b>｜國立高雄師範大學 科學教育暨環境教育研究所</div>
+          <div class="text-slate-600"><b>Tzu-Chiang Lin</b>｜Graduate Institute of Science Education and Environmental Education, National Kaohsiung Normal University, Taiwan</div>
+        </div>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-100 space-y-1 text-[11px] text-slate-500 leading-relaxed">
+        <p>本工具開發過程使用生成式 AI（Google Gemini、Anthropic Claude）協助撰寫程式碼；功能設計、方法學決策與結果驗證由開發者負責。</p>
+        <p>所有資料皆在您的瀏覽器中處理，不會上傳至任何伺服器。本工具以 MIT License 釋出 · 使用 D3.js（ISC）、PapaParse（MIT）、Tailwind CSS（MIT）。</p>
+      </div>
+    </div>
+  </footer>
+
   <script>
+    /********************************************************************
+     * 版本資訊：每次發布新版本時，只需修改這兩個常數（頁尾會自動更新）
+     ********************************************************************/
+    const APP_VERSION = '5.2';
+    const APP_UPDATED = '2026-10-24';
+    document.getElementById('appVersion').textContent = APP_VERSION;
+    document.getElementById('appUpdated').textContent = APP_UPDATED;
+
     /********************************************************************
      * 學術方法與計量指標小辭典資料庫 (Glossary Data)
      ********************************************************************/
@@ -384,12 +687,30 @@
       },
       louvain: {
         title: '5. Louvain / 模組度自動分群 (Modularity Clustering)',
-        formula: 'Q = \\frac{1}{2m} \\sum_{i,j} \\left[ A_{ij} - \\frac{k_i k_j}{2m} \\right] \\delta(c_i, c_j)',
-        desc: '透過最大化網路的「模組度（Modularity Q 值）」，在無需人為事先指定分類標準的情況下，自動識別出內部連線緊密、外部連線稀疏的知識聚落（Clusters）。',
-        interpretation: '【論文詮釋建議】：每一個分群顏色代表該研究領域中的一個「主流研究主題聚落（Thematic Cluster）」。研究者可根據各群內 TLS 最高的前 3~5 個關鍵字，為各個聚落進行學術命名。'
+        formula: 'Q = \\frac{1}{2m} \\sum_{i,j} \\left[ A_{ij} - \\gamma \\frac{k_i k_j}{2m} \\right] \\delta(c_i, c_j)',
+        desc: '透過最大化網路的「模組度（Modularity Q 值）」，在無需事先指定分類標準的情況下，自動識別內部連線緊密、外部連線稀疏的知識聚落（Clusters）。本工具實作完整的兩階段 Louvain 演算法（Blondel et al., 2008），反覆進行「節點局部移動」與「社群聚合」直到模組度不再提升。<br><br>【可調參數】：(1) 分群邊權重：預設先以 association strength 正規化共現次數，扣除高頻詞的規模效應（見「Association strength」條目）；(2) 解析度 γ：預設為 1，調高會分出較多、較小的聚落，調低則聚落較少、較大。模組度存在「解析度限制」，規模過小的主題可能被併入大聚落而無法辨識（Fortunato & Barthélemy, 2007），γ 可用來檢視不同尺度下的主題結構。報表中的 Q 值一律以 γ = 1 的標準公式、依分群所用的權重計算。<br><br>【方法學提醒】：VOSviewer 使用其自身的分群技術（Waltman, van Eck, & Noyons, 2010），即使正規化方式相同，分群結果仍不必然一致。若論文中的網路圖來自 VOSviewer，聚落命名與詮釋應以 VOSviewer 的分群為準；引用本工具的分群時，請在方法段落寫明演算法、邊權重、γ 值、Q 值與穩定性檢驗結果。',
+        interpretation: '【論文詮釋建議】：每一個分群顏色代表一個主題聚落（Thematic Cluster）。研究者可依各群內 TLS 最高的前 3~5 個關鍵字為聚落命名，並同時檢查「分群穩定度」：穩定度偏低的關鍵字位於聚落邊界，詮釋時不宜作為該聚落的代表詞。'
+      },
+      assoc: {
+        title: '7. Association strength 正規化 (Association Strength Normalization)',
+        formula: 's_{ij} = \\frac{2m \\, c_{ij}}{c_i \\, c_j}',
+        desc: '原始共現次數 c<sub>ij</sub> 會受到詞彙本身出現頻率的影響：高頻詞（例如檢索詞本身）幾乎與所有詞都有共現，若直接以原始次數分群，高頻詞會把大量詞彙拉進同一個聚落。Association strength 以兩詞各自的總共現次數 c<sub>i</sub>、c<sub>j</sub> 調整，衡量「實際共現次數相對於依兩詞頻率預期的共現次數」的比值（van Eck & Waltman, 2009）；m 為網路的總共現次數。VOSviewer 預設即採用此正規化方式。',
+        interpretation: '【使用建議】：一般共字分析建議維持預設的 association strength。切換為「原始共現次數」可作為敏感度分析：若兩種權重得到相近的聚落，表示主題結構不依賴特定的權重設定。此選項只影響分群；TLS、度中心性、中介中心性與網路圖的連線粗細仍以原始共現次數計算。'
+      },
+      stability: {
+        title: '8. 分群穩定性檢驗 (Clustering Stability)',
+        formula: 'S_i = \\frac{1}{R} \\sum_{r=1}^{R} \\frac{|C_i \\cap C_i^{(r)}|}{|C_i \\cup C_i^{(r)}|}',
+        desc: 'Louvain 的結果會受到節點處理順序影響，模組度也常存在多個 Q 值相近、但分群不同的解（Good, de Montjoye, & Clauset, 2010）。本工具以固定亂數種子將節點順序隨機打亂、重複執行 100 次，並以「固定順序 + 100 次重複」中模組度最高的分群作為報告結果。<br><br>【節點穩定度 S<sub>i</sub>】：節點 i 在報告分群中的所屬聚落 C<sub>i</sub>，與第 r 次重複中所屬聚落 C<sub>i</sub><sup>(r)</sup> 的 Jaccard 相似度平均值，介於 0 到 1；1 表示每次重複中，該節點都與完全相同的一組關鍵字分在一起。<br>【整體指標】：與報告分群完全相同的重複比例、調整蘭德指數（Adjusted Rand Index, ARI；Hubert & Arabie, 1985）平均值，以及重複結果的 Q 值範圍。ARI 為 1 表示分群完全一致，接近 0 表示一致程度與隨機分群相當。',
+        interpretation: '【論文詮釋建議】：可在方法或結果段落報告「100 次隨機順序重複中，x% 與報告分群相同，平均 ARI = y」。表格中以橘色（S < 0.70）與紅色（S < 0.50）標示邊界不穩定的關鍵字；0.70 是本工具的提示門檻，屬於經驗值而非統計檢定標準。由於使用固定亂數種子，同一份資料與設定每次都會得到相同的結果，確保可重現性。'
+      },
+      sensitivity: {
+        title: '9. 分群敏感度分析 (Sensitivity Analysis)',
+        formula: '\\bar{J}_i = \\frac{1}{K} \\sum_{k=1}^{K} \\frac{|C_i \\cap C_i^{(k)}|}{|C_i \\cup C_i^{(k)}|}',
+        desc: '穩定性檢驗回答「同一組設定下，結果是否可重現」；敏感度分析回答「改變分析設定時，主要聚落是否依然存在」。本工具以目前畫面上的分群為比較基準，依使用者指定的解析度 γ、入圖門檻與邊權重組合逐一重新分群（每組皆含 100 次穩定性檢驗），並報告：(1) 每組設定的節點數、聚落數、Q 值與穩定性；(2) 與目前分群的調整蘭德指數（ARI），以兩組設定共同包含的關鍵字計算；(3) 每個關鍵字的跨設定一致度 J<sub>i</sub>：關鍵字在目前分群中的所屬聚落 C<sub>i</sub>，與第 k 組設定中所屬聚落 C<sub>i</sub><sup>(k)</sup>（限共同關鍵字）的 Jaccard 相似度，在 K 組設定（不含目前設定本身）間取平均。',
+        interpretation: '【論文詮釋建議】：可報告「在 γ = 0.6–1.6 的範圍內，各設定與報告分群的 ARI 中位數為 x，y% 的關鍵字跨設定一致度 ≥ 0.70」。聚落命名宜以核心詞（一致度 ≥ 0.70）為主；邊界詞歸屬會隨設定改變，詮釋時應說明其位於主題之間。γ 範圍越寬，ARI 自然越低：聚落數改變時，即使主題結構相同，ARI 也會下降，因此請同時參考聚落數與核心詞的變化。0.70 為本工具的提示門檻，屬於經驗值。'
       },
       force: {
-        title: '6. 力導向佈局與年份疊加圖 (Force-directed Layout & Overlay)',
+        title: '10. 力導向佈局與年份疊加圖 (Force-directed Layout & Overlay)',
         formula: 'F_{net} = F_{repulsion}(u, v) + F_{spring}(e)',
         desc: '將知識網路模擬為物理系統：所有節點如同帶同性電荷般互相排斥（避免重疊），而具有共現關係的節點則被連線彈簧拉近。當系統收斂至能量最低狀態時，主題相近的詞彙便會在空間中自然聚集。切換至「年份演進圖（Overlay）」時，節點色彩則反映該關鍵字出現文獻的平均發表年份（Avg. Publication Year）。',
         interpretation: '【論文詮釋建議】：空間距離越近代表主題同質性越高；而年份疊加圖中偏暖色（黃/橘紅）的節點，則代表近一兩年剛崛起的「研究前沿（Research Fronts / Emerging Trends）」。'
@@ -780,6 +1101,8 @@
         document.getElementById('btnExportSnaCsv').disabled = false;
         document.getElementById('btnExportMatrixCsv').disabled = false;
         document.getElementById('btnRunSna').disabled = false;
+        document.getElementById('btnOpenFullscreen').disabled = false;
+        document.getElementById('btnOpenSens').disabled = false;
         executeSnaAndRenderGraph();
       }
     }
@@ -923,23 +1246,28 @@
      * 2. Brandes Exact Betweenness Centrality (無權重最短路徑中介中心性)
      * 3. Greedy Modularity / Louvain 社群分群演算法
      ********************************************************************/
+    // 入圖節點篩選：出現篇數 ≥ 門檻、最多 120 個；門檻過高致節點少於 3 個時自動放寬至 ≥ 1
+    // 主分析與敏感度分析共用此函式，確保兩者使用完全相同的節點集合
+    const SNA_MAX_NODES = 120;
+    function selectSnaEntries(mergedFreqMap, minOcc) {
+      let entries = Array.from(mergedFreqMap.entries())
+        .filter(([_, count]) => count >= minOcc)
+        .sort((a, b) => b[1] - a[1]);
+      if (entries.length < 3 && minOcc > 1) {
+        entries = Array.from(mergedFreqMap.entries())
+          .filter(([_, count]) => count >= 1)
+          .sort((a, b) => b[1] - a[1]);
+      }
+      return entries.slice(0, SNA_MAX_NODES);
+    }
+
     function executeSnaAndRenderGraph() {
+      if (typeof closeDocPanel === 'function' && DP.open) closeDocPanel(); // 重新計算後舊清單已失效
       const mergedFreqMap = computeMergedFreqMap();
       const mode = document.getElementById('selectKwMode').value;
       const minOcc = parseInt(document.getElementById('snaMinOccInput').value, 10) || 1;
 
-      // 篩選符合門檻的前 120 個高頻節點
-      let sortedEntries = Array.from(mergedFreqMap.entries())
-        .filter(([_, count]) => count >= minOcc)
-        .sort((a, b) => b[1] - a[1]);
-
-      // 若門檻設太高導致節點少於 3 個，自動放寬至 >= 1
-      if (sortedEntries.length < 3 && minOcc > 1) {
-        sortedEntries = Array.from(mergedFreqMap.entries())
-          .filter(([_, count]) => count >= 1)
-          .sort((a, b) => b[1] - a[1]);
-      }
-      sortedEntries = sortedEntries.slice(0, 120);
+      const sortedEntries = selectSnaEntries(mergedFreqMap, minOcc);
 
       const N = sortedEntries.length;
       const nodeMap = new Map();
@@ -954,7 +1282,7 @@
           normDegree: 0,
           betweenness: 0,
           cluster: 1,
-          avgYear: 2025,
+          avgYear: null, // 無年份資料時保持 null，避免在年份演進圖中被誤判為研究前沿
           yearSum: 0,
           yearCount: 0
         };
@@ -962,16 +1290,26 @@
 
       // 建立 N x N 共現矩陣
       const matrix = Array.from({ length: N }, () => new Array(N).fill(0));
+      // 節點 → 文獻索引：與共現矩陣在同一迴圈建立，確保清單篇數與節點出現篇數完全一致
+      // 每筆記錄該文獻是透過哪些原始關鍵字被歸入此節點 (同義詞 / 單複數整併後可能不只一個)
+      const nodeDocs = Array.from({ length: N }, () => []);
 
       for (const doc of activeDocs) {
         const pubYear = parseInt(doc['Year'], 10);
         const rawKws = extractRawKeywordsFromDoc(doc, mode);
-        const uniqueTargets = Array.from(new Set(
-          rawKws.filter(k => !userExcludeSet.has(k)).map(k => getEffectiveTargetTerm(k))
-        )).filter(t => nodeMap.has(t));
+        const rawsByTarget = new Map();
+        for (const k of rawKws) {
+          if (userExcludeSet.has(k)) continue;
+          const t = getEffectiveTargetTerm(k);
+          if (!nodeMap.has(t)) continue;
+          if (!rawsByTarget.has(t)) rawsByTarget.set(t, new Set());
+          rawsByTarget.get(t).add(k);
+        }
+        const uniqueTargets = Array.from(rawsByTarget.keys());
 
         for (const t of uniqueTargets) {
           const u = nodeMap.get(t);
+          nodeDocs[u].push({ doc, raws: Array.from(rawsByTarget.get(t)) });
           if (!isNaN(pubYear) && pubYear > 1950 && pubYear < 2035) {
             nodes[u].yearSum += pubYear;
             nodes[u].yearCount += 1;
@@ -1051,84 +1389,271 @@
         nodes[i].betweenness = +(cb[i] / normFactor).toFixed(4);
       }
 
-      // 執行模組度最佳化社群偵測 (Louvain Phase-1 Local Modularity Moving)
-      assignLouvainClusters(nodes, matrix, N);
+      // 分群：邊權重正規化 + 兩階段 Louvain + 穩定性檢驗（見 assignLouvainClusters）
+      const gammaInput = parseFloat(document.getElementById('clusterResolutionInput').value);
+      const clusterInfo = assignLouvainClusters(nodes, matrix, N, {
+        weightMode: document.getElementById('clusterWeightSelect').value,
+        gamma: isFinite(gammaInput) && gammaInput > 0 ? gammaInput : 1
+      });
+      const modularityQ = clusterInfo.Q;
+      renderStabilityNote(clusterInfo, N);
 
       const density = N > 1 ? ((2 * links.length) / (N * (N - 1))).toFixed(3) : 0;
-      document.getElementById('snaMacroStats').textContent = `入圖節點: ${N} | 共現連線: ${links.length} | 網路密度: ${density}`;
+      const clusterCount = new Set(nodes.map(n => n.cluster)).size;
+      document.getElementById('snaMacroStats').textContent =
+        `入圖節點: ${N} | 共現連線: ${links.length} | 網路密度: ${density} | 聚落數: ${clusterCount} | 模組度 Q: ${modularityQ.toFixed(3)}`;
 
       // 複製一份依 TLS 排序供表格呈現
       const tableNodes = [...nodes].sort((a, b) => (b.tls - a.tls) || (b.occurrences - a.occurrences));
-      computedSnaResults = { nodes, tableNodes, links, matrix };
+      computedSnaResults = { nodes, tableNodes, links, matrix, nodeDocs, nodeMap, macro: { N, L: links.length, density: +density, clusterCount, modularityQ, clusterInfo, minOcc } };
 
       renderSnaMetricsTable(tableNodes);
       renderD3Network(nodes, links);
     }
 
-    function assignLouvainClusters(nodes, matrix, N) {
-      let comm = nodes.map((_, i) => i);
-      let totalWeight2 = 0;
+    /********************************************************************
+     * 分群引擎
+     * 1. 邊權重：原始共現次數，或 association strength 正規化
+     *    s_ij = 2m · c_ij / (c_i · c_j)，c_i = 節點 i 的總共現次數，m = 網路總共現次數
+     *    (van Eck & Waltman, 2009; Waltman, van Eck, & Noyons, 2010)，與 VOSviewer 預設的正規化方式相同
+     * 2. 兩階段 Louvain (Blondel et al., 2008)，可設定解析度 γ
+     * 3. 穩定性檢驗：以固定亂數種子隨機打亂節點處理順序，重複執行 STABILITY_RUNS 次；
+     *    報告的分群取「固定順序 + 所有重複」中模組度最高者，穩定度相對於此分群計算。
+     *    固定種子確保同一份資料、同一組設定每次得到完全相同的結果。
+     ********************************************************************/
+    const STABILITY_RUNS = 100;
+    const STABILITY_SEED = 20261024;
+    const STABILITY_WARN = 0.7; // 提示門檻（經驗值，非統計檢定標準）
+
+    function mulberry32(seed) {
+      let a = seed >>> 0;
+      return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function buildClusteringWeights(matrix, N, mode) {
+      if (mode !== 'assoc') return matrix;
+      const c = new Array(N).fill(0);
+      let twoM = 0;
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { c[i] += matrix[i][j]; twoM += matrix[i][j]; }
+      return matrix.map((row, i) => row.map((v, j) => (v > 0 ? (twoM * v) / (c[i] * c[j]) : 0)));
+    }
+
+    // 單次 Louvain；rng 為 null 時依固定順序 (0..n-1) 掃描節點，否則每一層隨機打亂順序
+    function louvainPartition(W, N, gamma, rng) {
+      let total2m = 0;
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) total2m += W[i][j];
+      if (total2m === 0) return Array.from({ length: N }, (_, i) => i);
+
+      let adjW = Array.from({ length: N }, (_, i) => {
+        const m = new Map();
+        for (let j = 0; j < N; j++) if (W[i][j] > 0) m.set(j, W[i][j]);
+        return m;
+      });
+      let membership = Array.from({ length: N }, (_, i) => i);
+      const EPS = 1e-12;
+
+      for (let level = 0; level < 30; level++) {
+        const n = adjW.length;
+        const k = adjW.map(m => { let s = 0; for (const w of m.values()) s += w; return s; });
+        const comm = Array.from({ length: n }, (_, i) => i);
+        const sigmaTot = k.slice();
+        const order = Array.from({ length: n }, (_, i) => i);
+        if (rng) for (let i = n - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+        let movedAny = false;
+
+        for (let pass = 0; pass < 200; pass++) {
+          let moved = false;
+          for (const i of order) {
+            const ci = comm[i];
+            const wToComm = new Map();
+            for (const [j, w] of adjW[i]) {
+              if (j === i) continue;
+              wToComm.set(comm[j], (wToComm.get(comm[j]) || 0) + w);
+            }
+            sigmaTot[ci] -= k[i];
+            let bestComm = ci;
+            let bestGain = (wToComm.get(ci) || 0) - gamma * (sigmaTot[ci] * k[i]) / total2m;
+            for (const [c, wic] of wToComm) {
+              const gain = wic - gamma * (sigmaTot[c] * k[i]) / total2m;
+              if (gain > bestGain + EPS) { bestGain = gain; bestComm = c; }
+            }
+            sigmaTot[bestComm] += k[i];
+            if (bestComm !== ci) { comm[i] = bestComm; moved = true; movedAny = true; }
+          }
+          if (!moved) break;
+        }
+        if (!movedAny) break;
+
+        const remap = new Map();
+        comm.forEach(c => { if (!remap.has(c)) remap.set(c, remap.size); });
+        const newAdj = Array.from({ length: remap.size }, () => new Map());
+        for (let i = 0; i < n; i++) {
+          const ci = remap.get(comm[i]);
+          for (const [j, w] of adjW[i]) {
+            const cj = remap.get(comm[j]);
+            newAdj[ci].set(cj, (newAdj[ci].get(cj) || 0) + w);
+          }
+        }
+        membership = membership.map(s => remap.get(comm[s]));
+        adjW = newAdj;
+        if (remap.size === n) break;
+      }
+      return membership;
+    }
+
+    // 標準模組度 (γ = 1)，以分群所用的權重矩陣計算
+    function modularityOf(W, N, membership) {
+      let total2m = 0;
       const k = new Array(N).fill(0);
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { k[i] += W[i][j]; total2m += W[i][j]; }
+      if (total2m === 0) return 0;
+      const inW = new Map(), totW = new Map();
       for (let i = 0; i < N; i++) {
-        for (let j = 0; j < N; j++) {
-          k[i] += matrix[i][j];
-          totalWeight2 += matrix[i][j];
-        }
+        const c = membership[i];
+        totW.set(c, (totW.get(c) || 0) + k[i]);
+        for (let j = 0; j < N; j++) if (membership[j] === c) inW.set(c, (inW.get(c) || 0) + W[i][j]);
       }
-      if (totalWeight2 === 0) return;
+      let Q = 0;
+      for (const c of totW.keys()) Q += (inW.get(c) || 0) / total2m - Math.pow(totW.get(c) / total2m, 2);
+      return Q;
+    }
 
-      let improved = true;
-      let iter = 0;
-      while (improved && iter < 20) {
-        improved = false;
-        iter++;
+    // 調整蘭德指數 (Adjusted Rand Index; Hubert & Arabie, 1985)
+    function adjustedRandIndex(a, b) {
+      const n = a.length;
+      if (n < 2) return 1;
+      const c2 = x => (x * (x - 1)) / 2;
+      const table = new Map(), ra = new Map(), rb = new Map();
+      for (let i = 0; i < n; i++) {
+        const key = `${a[i]}|${b[i]}`;
+        table.set(key, (table.get(key) || 0) + 1);
+        ra.set(a[i], (ra.get(a[i]) || 0) + 1);
+        rb.set(b[i], (rb.get(b[i]) || 0) + 1);
+      }
+      let sumIJ = 0, sumA = 0, sumB = 0;
+      for (const v of table.values()) sumIJ += c2(v);
+      for (const v of ra.values()) sumA += c2(v);
+      for (const v of rb.values()) sumB += c2(v);
+      const expected = (sumA * sumB) / c2(n);
+      const maxIdx = (sumA + sumB) / 2;
+      if (maxIdx === expected) return 1;
+      return (sumIJ - expected) / (maxIdx - expected);
+    }
+
+    const partitionKey = m => { const seen = new Map(); return m.map(c => { if (!seen.has(c)) seen.set(c, seen.size); return seen.get(c); }).join(','); };
+
+    /**
+     * 執行分群與穩定性檢驗，結果寫入 nodes[i].cluster 與 nodes[i].stability。
+     * 回傳 { Q, weightMode, gamma, stability: { runs, meanARI, identicalPct, qMin, qMax, unstable } }
+     */
+    function assignLouvainClusters(nodes, matrix, N, opts = {}) {
+      const weightMode = opts.weightMode || 'assoc';
+      const gamma = opts.gamma > 0 ? opts.gamma : 1;
+      const info = { Q: 0, weightMode, gamma, stability: null };
+      if (N === 0) return info;
+      const W = buildClusteringWeights(matrix, N, weightMode);
+
+      const candidates = [];
+      const det = louvainPartition(W, N, gamma, null);
+      candidates.push({ m: det, Q: modularityOf(W, N, det) });
+      const rng = mulberry32(STABILITY_SEED);
+      const runs = [];
+      for (let r = 0; r < STABILITY_RUNS; r++) {
+        const m = louvainPartition(W, N, gamma, rng);
+        const run = { m, Q: modularityOf(W, N, m) };
+        runs.push(run);
+        candidates.push(run);
+      }
+      let best = candidates[0];
+      for (const c of candidates) if (c.Q > best.Q + 1e-12) best = c;
+      const ref = best.m;
+      info.Q = best.Q;
+
+      // 節點穩定度：節點在參考分群中的所屬聚落，與每次重複中所屬聚落的 Jaccard 相似度平均
+      const refSet = i => { const s = new Set(); for (let j = 0; j < N; j++) if (ref[j] === ref[i]) s.add(j); return s; };
+      const refSets = Array.from({ length: N }, (_, i) => refSet(i));
+      const stab = new Array(N).fill(0);
+      for (const run of runs) {
+        const groups = new Map();
+        run.m.forEach((c, j) => { if (!groups.has(c)) groups.set(c, []); groups.get(c).push(j); });
         for (let i = 0; i < N; i++) {
-          const currentComm = comm[i];
-          const commWeights = new Map();
-          for (let j = 0; j < N; j++) {
-            if (i === j || matrix[i][j] === 0) continue;
-            const c = comm[j];
-            commWeights.set(c, (commWeights.get(c) || 0) + matrix[i][j]);
-          }
-          let bestComm = currentComm;
-          let maxDeltaQ = 0;
-
-          for (const [targetComm, k_i_in] of commWeights.entries()) {
-            if (targetComm === currentComm) continue;
-            let sigmaTot = 0;
-            for (let m = 0; m < N; m++) {
-              if (comm[m] === targetComm) sigmaTot += k[m];
-            }
-            const deltaQ = k_i_in - (sigmaTot * k[i]) / totalWeight2;
-            if (deltaQ > maxDeltaQ) {
-              maxDeltaQ = deltaQ;
-              bestComm = targetComm;
-            }
-          }
-          if (bestComm !== currentComm) {
-            comm[i] = bestComm;
-            improved = true;
-          }
+          const g = groups.get(run.m[i]);
+          let inter = 0;
+          for (const j of g) if (refSets[i].has(j)) inter++;
+          stab[i] += inter / (refSets[i].size + g.length - inter);
         }
       }
-
-      // 重新編號 Cluster 為 1, 2, 3... (依聚落大小排序)
-      const commCounts = new Map();
-      comm.forEach(c => commCounts.set(c, (commCounts.get(c) || 0) + 1));
-      const sortedComms = Array.from(commCounts.entries()).sort((a, b) => b[1] - a[1]);
-      const commRemap = new Map();
-      sortedComms.forEach(([oldId], idx) => commRemap.set(oldId, idx + 1));
-
-      for (let i = 0; i < N; i++) {
-        nodes[i].cluster = commRemap.get(comm[i]) || 1;
+      const refKey = partitionKey(ref);
+      let ariSum = 0, same = 0, qMin = Infinity, qMax = -Infinity;
+      for (const run of runs) {
+        ariSum += adjustedRandIndex(ref, run.m);
+        if (partitionKey(run.m) === refKey) same++;
+        qMin = Math.min(qMin, run.Q); qMax = Math.max(qMax, run.Q);
       }
+
+      // 重新編號 Cluster 為 1, 2, 3...（依聚落大小，同大小依總出現篇數）
+      const commSize = new Map(), commOcc = new Map();
+      ref.forEach((c, i) => {
+        commSize.set(c, (commSize.get(c) || 0) + 1);
+        commOcc.set(c, (commOcc.get(c) || 0) + nodes[i].occurrences);
+      });
+      const sorted = Array.from(commSize.keys()).sort((a, b) => (commSize.get(b) - commSize.get(a)) || (commOcc.get(b) - commOcc.get(a)));
+      const commRemap = new Map();
+      sorted.forEach((oldId, idx) => commRemap.set(oldId, idx + 1));
+      let unstable = 0;
+      for (let i = 0; i < N; i++) {
+        nodes[i].cluster = commRemap.get(ref[i]);
+        nodes[i].stability = +(stab[i] / runs.length).toFixed(3);
+        if (nodes[i].stability < STABILITY_WARN) unstable++;
+      }
+      info.stability = {
+        runs: runs.length, meanARI: ariSum / runs.length, identicalPct: (same / runs.length) * 100,
+        qMin, qMax, unstable
+      };
+      return info;
+    }
+
+    function stabilityClass(v) {
+      if (v == null) return 'text-slate-400';
+      if (v < 0.5) return 'text-rose-600';
+      if (v < STABILITY_WARN) return 'text-amber-600';
+      return 'text-slate-700';
+    }
+
+    function clusterMethodText(info, lang = 'zh') {
+      const w = info.weightMode === 'assoc'
+        ? (lang === 'zh' ? 'association strength 正規化' : 'association strength normalization')
+        : (lang === 'zh' ? '原始共現次數' : 'raw co-occurrence counts');
+      return lang === 'zh'
+        ? `Louvain 分群；邊權重：${w}；解析度 γ = ${info.gamma}`
+        : `Louvain clustering; edge weights: ${w}; resolution γ = ${info.gamma}`;
+    }
+
+    function renderStabilityNote(info, N) {
+      const el = document.getElementById('snaStabilityNote');
+      const st = info.stability;
+      if (!st || N < 3) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+      const qRange = `${st.qMin.toFixed(3)}–${st.qMax.toFixed(3)}`;
+      el.innerHTML = `
+        <b>分群方法：</b>${escapeHtml(clusterMethodText(info))}（報告分群取 ${st.runs + 1} 次執行中模組度最高者，Q = ${info.Q.toFixed(3)}）<br>
+        <b><span class="term-help" onclick="openTermModal('stability')">穩定性檢驗 [?]</span>：</b>
+        ${st.runs} 次隨機順序重複中，<b>${st.identicalPct.toFixed(0)}%</b> 與報告分群完全相同；
+        平均 ARI = <b>${st.meanARI.toFixed(3)}</b>；Q 範圍 ${qRange}；
+        穩定度 &lt; ${STABILITY_WARN.toFixed(2)} 的節點 <b class="${st.unstable ? 'text-amber-700' : ''}">${st.unstable}</b> 個（表格中以橘／紅色標示）。`;
     }
 
     function renderSnaMetricsTable(tableNodes) {
       const tbody = document.getElementById('snaMetricsTableBody');
       tbody.innerHTML = '';
       if (tableNodes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-slate-400">無符合門檻的關鍵字</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-slate-400">無符合門檻的關鍵字</td></tr>`;
         return;
       }
 
@@ -1136,7 +1661,9 @@
       tableNodes.forEach((n, idx) => {
         const color = CLUSTER_COLORS[(n.cluster - 1) % CLUSTER_COLORS.length];
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-50';
+        tr.className = 'hover:bg-indigo-50 cursor-pointer';
+        tr.dataset.term = n.id;
+        tr.title = '點擊查看構成此節點的文獻';
         tr.innerHTML = `
           <td class="py-2 px-2.5 text-center text-slate-400 font-bold">${idx + 1}</td>
           <td class="py-2 px-2.5 font-semibold text-slate-800">${escapeHtml(n.id)}</td>
@@ -1146,11 +1673,22 @@
           <td class="py-2 px-2 text-right text-slate-700 font-medium">${n.occurrences}</td>
           <td class="py-2 px-2 text-right font-bold text-indigo-700">${n.tls}</td>
           <td class="py-2 px-2 text-right text-slate-600">${n.normDegree}</td>
-          <td class="py-2 px-2.5 text-right font-semibold text-emerald-700">${n.betweenness}</td>
+          <td class="py-2 px-2 text-right font-semibold text-emerald-700">${n.betweenness}</td>
+          <td class="py-2 px-2.5 text-right font-semibold ${stabilityClass(n.stability)}"
+            title="${n.stability == null ? '' : `在 ${STABILITY_RUNS} 次重複分群中，此節點所屬聚落與報告分群的平均 Jaccard 相似度`}">${n.stability == null ? '—' : n.stability.toFixed(2)}</td>
         `;
         fragment.appendChild(tr);
       });
       tbody.appendChild(fragment);
+    }
+
+    // 年份色階範圍完全依資料決定；僅有單一年份時前後各留 0.5 年避免色階退化
+    function getYearDomain(nodeList) {
+      const ys = nodeList.map(n => n.avgYear).filter(y => y != null);
+      if (ys.length === 0) return { minYear: 0, maxYear: 1, hasYears: false };
+      let minYear = Math.min(...ys), maxYear = Math.max(...ys);
+      if (maxYear - minYear < 0.5) { minYear -= 0.5; maxYear += 0.5; }
+      return { minYear, maxYear, hasYears: true };
     }
 
     function renderD3Network(nodes, links) {
@@ -1170,10 +1708,8 @@
       }));
 
       // 計算年份色階 (供 Overlay 模式使用)
-      const validYears = d3Nodes.map(n => n.avgYear).filter(Boolean);
-      const minYear = Math.min(...validYears, 2023);
-      const maxYear = Math.max(...validYears, 2026);
-      const yearColorScale = d3.scaleSequential(d3.interpolateTurbo).domain([minYear - 0.2, maxYear + 0.2]);
+      const { minYear, maxYear } = getYearDomain(d3Nodes);
+      const yearColorScale = d3.scaleSequential(d3.interpolateTurbo).domain([minYear, maxYear]);
 
       const legendEl = document.getElementById('canvasLegend');
       legendEl.classList.remove('hidden');
@@ -1188,7 +1724,7 @@
       }
 
       const getNodeColor = (d) => {
-        if (currentGraphMode === 'overlay') return yearColorScale(d.avgYear);
+        if (currentGraphMode === 'overlay') return d.avgYear == null ? '#94a3b8' : yearColorScale(d.avgYear);
         return CLUSTER_COLORS[(d.cluster - 1) % CLUSTER_COLORS.length];
       };
 
@@ -1213,6 +1749,19 @@
         .attr('stroke', '#64748b')
         .attr('stroke-opacity', 0.45)
         .attr('stroke-width', d => Math.min(1 + Math.sqrt(d.weight) * 1.2, 6));
+
+      // 透明的加寬點擊區，讓細連線也容易點到
+      const linkHit = g.append('g')
+        .selectAll('line')
+        .data(d3Links)
+        .enter().append('line')
+        .attr('stroke', 'transparent')
+        .attr('stroke-width', 9)
+        .style('cursor', 'pointer')
+        .on('click', (event, l) => { event.stopPropagation(); openDocPanelForLink(l.source.index, l.target.index); })
+        .on('mouseenter', function () { d3.select(this).attr('stroke', 'rgba(56,189,248,0.35)'); })
+        .on('mouseleave', function () { d3.select(this).attr('stroke', 'transparent'); });
+      linkHit.append('title').text(l => `${l.source.id} ↔ ${l.target.id}\n共現 ${l.weight} 篇（點擊查看文獻）`);
 
       const node = g.append('g')
         .selectAll('g')
@@ -1249,7 +1798,7 @@
         .style('text-shadow', '0 1px 3px rgba(0,0,0,0.9)');
 
       node.append('title')
-        .text(d => `${d.id}\n出現篇數: ${d.occurrences}\n總連結強度 (TLS): ${d.tls}\n中介中心性: ${d.betweenness}\n平均發表年份: ${d.avgYear}`);
+        .text(d => `${d.id}\n出現篇數: ${d.occurrences}\n總連結強度 (TLS): ${d.tls}\n中介中心性: ${d.betweenness}\n平均發表年份: ${d.avgYear ?? '無年份資料'}`);
 
       // 滑鼠懸停高亮鄰居節點與連線
       const neighborSet = new Set();
@@ -1257,6 +1806,8 @@
         neighborSet.add(`${l.source.index}-${l.target.index}`);
         neighborSet.add(`${l.target.index}-${l.source.index}`);
       });
+
+      node.on('click', (event, d) => { event.stopPropagation(); openDocPanelForNode(d.index); });
 
       node.on('mouseenter', (_, d) => {
         node.style('opacity', o => (o.index === d.index || neighborSet.has(`${d.index}-${o.index}`)) ? 1 : 0.15);
@@ -1269,6 +1820,11 @@
 
       simulation.on('tick', () => {
         link
+          .attr('x1', d => d.source.x)
+          .attr('y1', d => d.source.y)
+          .attr('x2', d => d.target.x)
+          .attr('y2', d => d.target.y);
+        linkHit
           .attr('x1', d => d.source.x)
           .attr('y1', d => d.source.y)
           .attr('x2', d => d.target.x)
@@ -1323,7 +1879,8 @@
         Degree_Centrality: n.degree,
         Normalized_Degree: n.normDegree,
         Betweenness_Centrality: n.betweenness,
-        Avg_Publication_Year: n.avgYear
+        Avg_Publication_Year: n.avgYear ?? '',
+        Cluster_Stability: n.stability ?? ''
       }));
       const csv = Papa.unparse(rows);
       triggerDownload(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }), `SNA_Centrality_Metrics_${getTimestampStr()}.csv`);
@@ -1474,6 +2031,8 @@
     // SNA 控制與視覺模式切換
     document.getElementById('btnRunSna').addEventListener('click', executeSnaAndRenderGraph);
     document.getElementById('snaMinOccInput').addEventListener('change', executeSnaAndRenderGraph);
+    document.getElementById('clusterWeightSelect').addEventListener('change', () => { if (activeDocs.length) executeSnaAndRenderGraph(); });
+    document.getElementById('clusterResolutionInput').addEventListener('change', () => { if (activeDocs.length) executeSnaAndRenderGraph(); });
 
     document.getElementById('btnViewCluster').addEventListener('click', () => {
       currentGraphMode = 'cluster';
@@ -1519,6 +2078,1007 @@
     document.getElementById('btnExportThesaurus').addEventListener('click', exportVOSviewerThesaurusTxt);
     document.getElementById('btnExportSnaCsv').addEventListener('click', exportSnaCsv);
     document.getElementById('btnExportMatrixCsv').addEventListener('click', exportCooccurrenceMatrixCsv);
+
+    /********************************************************************
+     * 全螢幕大圖模式 (Full-screen Network Studio) 與期刊級圖片匯出
+     * - 獨立的力導向模擬；關閉後保留節點座標與固定狀態，重新開啟可延續排版
+     * - 所有樣式以 SVG 屬性寫入（非 CSS class），確保匯出的 SVG/PNG 與畫面一致，
+     *   並可在 Illustrator、Inkscape、PowerPoint 中編輯
+     ********************************************************************/
+    const FS_THEMES = {
+      light: { bg: '#ffffff', text: '#111827', halo: '#ffffff', link: '#9ca3af', nodeStroke: '#ffffff', muted: '#4b5563', broker: '#b45309', noYear: '#d1d5db', other: '#9ca3af', legendBg: 'rgba(255,255,255,0.92)', legendBorder: '#e5e7eb' },
+      dark:  { bg: '#020617', text: '#f1f5f9', halo: '#020617', link: '#64748b', nodeStroke: '#e2e8f0', muted: '#94a3b8', broker: '#fbbf24', noYear: '#475569', other: '#64748b', legendBg: 'rgba(15,23,42,0.88)', legendBorder: '#334155' }
+    };
+    const FS_FONTS = {
+      arial: 'Arial, Helvetica, "Noto Sans TC", "Microsoft JhengHei", sans-serif',
+      times: '"Times New Roman", Times, "Noto Serif TC", PMingLiU, serif',
+      noto: '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif'
+    };
+    const FS_LAYOUT_IDS = new Set(['fsCharge', 'fsLinkDist', 'fsNodeScale', 'fsLabelAvoid', 'fsFontSize', 'fsLabelMin', 'fsFontScale', 'fsFont']);
+    const FS = { open: false, sim: null, nodes: [], links: [], posCache: new Map(), sourceRef: null, fitted: false, o: null, legendH: 0 };
+    const fsMeasureCtx = document.createElement('canvas').getContext('2d');
+
+    function fsTextWidth(text, sizePx, family, weight = 400) {
+      fsMeasureCtx.font = `${weight} ${sizePx}px ${family}`;
+      return fsMeasureCtx.measureText(text).width;
+    }
+
+    function fsOpts() {
+      const v = id => document.getElementById(id);
+      return {
+        theme: v('fsTheme').value, color: v('fsColorMode').value, palette: v('fsYearPalette').value,
+        font: FS_FONTS[v('fsFont').value],
+        charge: -(+v('fsCharge').value), linkDist: +v('fsLinkDist').value, nodeScale: +v('fsNodeScale').value,
+        labelAvoid: v('fsLabelAvoid').checked, pinOnDrag: v('fsPinOnDrag').checked,
+        fontSize: +v('fsFontSize').value, labelMin: Math.max(1, parseInt(v('fsLabelMin').value, 10) || 1),
+        fontScale: v('fsFontScale').checked, halo: v('fsHalo').checked,
+        curved: v('fsCurved').checked, linkCluster: v('fsLinkCluster').checked,
+        linkOpacity: +v('fsLinkOpacity').value, linkMinW: Math.max(1, parseInt(v('fsLinkMinW').value, 10) || 1),
+        brokers: +v('fsBrokers').value,
+        showLegend: v('fsShowLegend').checked, showStats: v('fsShowStats').checked, lang: v('fsLegendLang').value,
+        title: v('fsTitle').value.trim(), pngScale: +v('fsPngScale').value, transparent: v('fsTransparent').checked
+      };
+    }
+
+    const fsRadius = (d, o) => (4 + 16 * Math.sqrt((d.occurrences - 1) / Math.max(1, FS.maxOcc - 1))) * o.nodeScale;
+    const fsFontPx = (d, o) => o.fontScale ? o.fontSize * (0.85 + 0.75 * Math.sqrt(d.occurrences / FS.maxOcc)) : o.fontSize;
+    const fsLabelWeight = d => d.occurrences >= FS.maxOcc * 0.4 ? 700 : 400;
+    const fsHasLabel = (d, o) => d.occurrences >= o.labelMin;
+    const fsClusterColor = (c, th) => c <= CLUSTER_COLORS.length ? CLUSTER_COLORS[c - 1] : th.other;
+
+    function fsCollideRadius(d, o) {
+      const r = fsRadius(d, o) + 3;
+      if (!o.labelAvoid || !fsHasLabel(d, o)) return r;
+      const w = fsTextWidth(d.id, fsFontPx(d, o), o.font, fsLabelWeight(d));
+      return Math.max(r, w / 2 + 3);
+    }
+
+    function fsColorFn(o, th) {
+      if (o.color === 'overlay') {
+        const { minYear, maxYear, hasYears } = getYearDomain(FS.nodes);
+        const interp = o.palette === 'viridis' ? d3.interpolateViridis : d3.interpolateTurbo;
+        const sc = d3.scaleSequential(interp).domain([minYear, maxYear]);
+        FS.year = { sc, interp, minYear, maxYear, hasYears };
+        return d => d.avgYear == null ? th.noYear : sc(d.avgYear);
+      }
+      return d => fsClusterColor(d.cluster, th);
+    }
+
+    function openFullscreen() {
+      if (!computedSnaResults || computedSnaResults.nodes.length === 0) return;
+      document.getElementById('fsModal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      FS.open = true;
+      if (FS.sourceRef !== computedSnaResults) {
+        // 新的 SNA 結果：預設標籤門檻使約 60 個節點顯示文字，著色方式沿用預覽圖
+        const occs = computedSnaResults.nodes.map(n => n.occurrences).sort((a, b) => b - a);
+        document.getElementById('fsLabelMin').value = occs.length > 60 ? Math.max(1, occs[59]) : 1;
+        document.getElementById('fsColorMode').value = currentGraphMode;
+        FS.sourceRef = computedSnaResults;
+        FS.fitted = false;
+      }
+      fsBuild();
+    }
+
+    function closeFullscreen() {
+      if (!FS.open) return;
+      FS.nodes.forEach(n => FS.posCache.set(n.id, { x: n.x, y: n.y, pinned: !!n.pinned }));
+      FS.lastTransform = d3.zoomTransform(document.getElementById('fsSvg'));
+      if (FS.sim) FS.sim.stop();
+      FS.open = false;
+      if (DP.open) document.getElementById('docPanel').style.right = '0';
+      document.getElementById('fsModal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    function fsBuild() {
+      const { nodes, links } = computedSnaResults;
+      const svgEl = document.getElementById('fsSvg');
+      const svg = d3.select(svgEl);
+      svg.selectAll('*').remove();
+      const W = svgEl.clientWidth || 1200, H = svgEl.clientHeight || 800;
+
+      let restored = 0;
+      FS.nodes = nodes.map(n => {
+        const d = { ...n };
+        const c = FS.posCache.get(n.id);
+        if (c && Number.isFinite(c.x)) {
+          d.x = c.x; d.y = c.y; restored++;
+          if (c.pinned) { d.fx = c.x; d.fy = c.y; d.pinned = true; }
+        }
+        return d;
+      });
+      FS.links = links.map(l => ({
+        source: typeof l.source === 'object' ? l.source.index : l.source,
+        target: typeof l.target === 'object' ? l.target.index : l.target,
+        weight: l.weight
+      }));
+      FS.maxOcc = Math.max(1, ...FS.nodes.map(n => n.occurrences));
+      FS.maxW = Math.max(1, ...FS.links.map(l => l.weight));
+      [...FS.nodes].filter(n => n.betweenness > 0).sort((a, b) => b.betweenness - a.betweenness)
+        .forEach((n, i) => { n.bRank = i + 1; });
+      FS.nbr = new Set();
+      FS.links.forEach(l => { FS.nbr.add(`${l.source}-${l.target}`); FS.nbr.add(`${l.target}-${l.source}`); });
+
+      svg.append('rect').attr('class', 'fs-bg').attr('width', '100%').attr('height', '100%');
+      FS.gZoom = svg.append('g');
+      FS.gGraph = FS.gZoom.append('g').attr('class', 'fs-graph');
+      FS.gLinks = FS.gGraph.append('g').attr('fill', 'none');
+      FS.gHit = FS.gGraph.append('g').attr('class', 'ui-only').attr('fill', 'none');
+      FS.gNodes = FS.gGraph.append('g');
+      FS.gHalo = FS.gGraph.append('g').attr('text-anchor', 'middle').style('pointer-events', 'none');
+      FS.gLabels = FS.gGraph.append('g').attr('text-anchor', 'middle').style('pointer-events', 'none');
+      FS.gOverlay = svg.append('g').style('pointer-events', 'none');
+
+      FS.zoom = d3.zoom().scaleExtent([0.03, 10]).on('zoom', e => FS.gZoom.attr('transform', e.transform));
+      svg.call(FS.zoom).on('dblclick.zoom', null);
+      if (FS.fitted && FS.lastTransform) svg.call(FS.zoom.transform, FS.lastTransform);
+
+      FS.sim = d3.forceSimulation(FS.nodes)
+        .force('link', d3.forceLink(FS.links).id(d => d.index))
+        .force('charge', d3.forceManyBody().distanceMax(1200))
+        .force('x', d3.forceX(W / 2).strength(0.04))
+        .force('y', d3.forceY(H / 2).strength(0.05))
+        .force('collide', d3.forceCollide().iterations(2))
+        .on('tick', fsTick)
+        .on('end', () => {
+          if (!FS.fitted) { fsFit(); FS.fitted = true; }
+          fsUpdateExportInfo();
+        });
+      if (restored === 0) FS.nodes.forEach(n => { n.x = W / 2 + (Math.random() - 0.5) * W * 0.5; n.y = H / 2 + (Math.random() - 0.5) * H * 0.5; });
+
+      fsRender();
+      fsApplyForces(restored === FS.nodes.length ? 0.3 : 1);
+    }
+
+    function fsApplyForces(alpha = 0.5) {
+      const o = FS.o;
+      FS.sim.force('charge').strength(o.charge);
+      FS.sim.force('link').distance(l => o.linkDist * (1.2 - 0.6 * Math.sqrt(l.weight / FS.maxW)));
+      FS.sim.force('collide').radius(d => fsCollideRadius(d, o));
+      FS.sim.alpha(alpha).restart();
+    }
+
+    function fsLinkPath(l) {
+      const sx = l.source.x, sy = l.source.y, tx = l.target.x, ty = l.target.y;
+      const f = v => (Math.round(v * 10) / 10);
+      if (!FS.o.curved) return `M${f(sx)},${f(sy)}L${f(tx)},${f(ty)}`;
+      const dr = Math.hypot(tx - sx, ty - sy) * 1.8;
+      return `M${f(sx)},${f(sy)}A${f(dr)},${f(dr)} 0 0,1 ${f(tx)},${f(ty)}`;
+    }
+
+    function fsTick() {
+      if (!FS.linkSel) return;
+      const o = FS.o;
+      FS.linkSel.attr('d', fsLinkPath);
+      FS.hitSel.attr('d', fsLinkPath);
+      FS.nodeSel.attr('transform', d => `translate(${Math.round(d.x * 10) / 10},${Math.round(d.y * 10) / 10})`);
+      const ly = d => Math.round((d.y + fsRadius(d, o) + fsFontPx(d, o) * 0.95) * 10) / 10;
+      FS.haloSel.attr('x', d => Math.round(d.x * 10) / 10).attr('y', ly);
+      FS.labelSel.attr('x', d => Math.round(d.x * 10) / 10).attr('y', ly);
+    }
+
+    function fsRender() {
+      const o = FS.o = fsOpts();
+      const th = FS_THEMES[o.theme];
+      document.getElementById('fsCanvasWrap').style.background = th.bg;
+      d3.select('#fsSvg').select('.fs-bg').attr('fill', th.bg);
+      const color = fsColorFn(o, th);
+      const wScale = d3.scaleSqrt().domain([1, FS.maxW]).range([0.6, 5]);
+
+      const visLinks = FS.links.filter(l => l.weight >= o.linkMinW);
+      FS.linkSel = FS.gLinks.selectAll('path')
+        .data(visLinks, l => `${l.source.index}-${l.target.index}`)
+        .join('path')
+        .attr('fill', 'none')
+        .attr('stroke-width', l => +wScale(l.weight).toFixed(2))
+        .attr('stroke-linecap', 'round')
+        .attr('stroke', l => (o.linkCluster && o.color === 'cluster' && l.source.cluster === l.target.cluster && l.source.cluster <= CLUSTER_COLORS.length)
+          ? fsClusterColor(l.source.cluster, th) : th.link)
+        .attr('stroke-opacity', o.linkOpacity);
+      FS.hitSel = FS.gHit.selectAll('path')
+        .data(visLinks, l => `${l.source.index}-${l.target.index}`)
+        .join(enter => {
+          const pth = enter.append('path').attr('stroke', 'transparent').attr('stroke-width', 10).style('cursor', 'pointer');
+          pth.append('title');
+          return pth;
+        })
+        .on('click', (e, l) => { e.stopPropagation(); openDocPanelForLink(l.source.index, l.target.index); })
+        .on('mouseenter', function () { d3.select(this).attr('stroke', o.theme === 'dark' ? 'rgba(56,189,248,0.35)' : 'rgba(79,70,229,0.25)'); })
+        .on('mouseleave', function () { d3.select(this).attr('stroke', 'transparent'); });
+      FS.hitSel.select('title').text(l => `${l.source.id} ↔ ${l.target.id}\n共現 ${l.weight} 篇（點擊查看文獻）`);
+
+      const drag = d3.drag()
+        .on('start', (e, d) => { if (!e.active) FS.sim.alphaTarget(0.2).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+        .on('end', (e, d) => {
+          if (!e.active) FS.sim.alphaTarget(0);
+          if (FS.o.pinOnDrag) d.pinned = true; else { d.fx = null; d.fy = null; d.pinned = false; }
+          fsRefreshPins();
+        });
+
+      FS.nodeSel = FS.gNodes.selectAll('g.fs-node')
+        .data(FS.nodes, d => d.id)
+        .join(enter => {
+          const g = enter.append('g').attr('class', 'fs-node').style('cursor', 'grab');
+          g.append('circle').attr('class', 'fs-ring');
+          g.append('circle').attr('class', 'fs-core');
+          g.append('circle').attr('class', 'fs-pin ui-only').attr('r', 2.6).attr('fill', '#ef4444');
+          g.append('title').attr('class', 'ui-only');
+          return g;
+        })
+        .call(drag)
+        .on('dblclick', (e, d) => { e.stopPropagation(); d.fx = null; d.fy = null; d.pinned = false; fsRefreshPins(); FS.sim.alpha(0.3).restart(); })
+        .on('click', (e, d) => { e.stopPropagation(); openDocPanelForNode(d.index); })
+        .on('mouseenter', (_, d) => fsHighlight(d))
+        .on('mouseleave', fsResetHighlight);
+
+      FS.nodeSel.select('circle.fs-core')
+        .attr('r', d => +fsRadius(d, o).toFixed(2)).attr('fill', color)
+        .attr('stroke', th.nodeStroke).attr('stroke-width', 1.2);
+      FS.nodeSel.select('circle.fs-ring')
+        .attr('r', d => +(fsRadius(d, o) + 3.5).toFixed(2)).attr('fill', 'none')
+        .attr('stroke', th.broker).attr('stroke-width', 2.4)
+        .attr('display', d => (o.brokers > 0 && d.bRank && d.bRank <= o.brokers) ? null : 'none');
+      FS.nodeSel.select('title').text(d =>
+        `${d.id}\n聚落: C${d.cluster}\n出現篇數: ${d.occurrences}\nTLS: ${d.tls}\n中介中心性: ${d.betweenness}\n分群穩定度: ${d.stability ?? '—'}\n平均發表年份: ${d.avgYear ?? '無年份資料'}`);
+      fsRefreshPins();
+
+      const labeled = FS.nodes.filter(d => fsHasLabel(d, o));
+      const styleText = (sel) => sel.text(d => d.id)
+        .attr('font-family', o.font)
+        .attr('font-size', d => +fsFontPx(d, o).toFixed(1))
+        .attr('font-weight', fsLabelWeight);
+      FS.haloSel = styleText(FS.gHalo.selectAll('text').data(o.halo ? labeled : [], d => d.id).join('text'))
+        .attr('fill', 'none').attr('stroke', th.halo).attr('stroke-width', 3.2)
+        .attr('stroke-linejoin', 'round').attr('stroke-opacity', 0.9);
+      FS.labelSel = styleText(FS.gLabels.selectAll('text').data(labeled, d => d.id).join('text'))
+        .attr('fill', th.text);
+
+      // 側欄資訊
+      ['fsCharge', 'fsLinkDist', 'fsLinkOpacity', 'fsFontSize', 'fsBrokers'].forEach(id => {
+        document.getElementById(id + 'Val').textContent = document.getElementById(id).value;
+      });
+      document.getElementById('fsNodeScaleVal').textContent = `${o.nodeScale.toFixed(1)}×`;
+      document.getElementById('fsLabelCount').textContent = `目前顯示 ${labeled.length} / ${FS.nodes.length} 個節點標籤`;
+      document.getElementById('fsLinkCount').textContent = `目前顯示 ${visLinks.length} / ${FS.links.length} 條連線（佈局仍以全部連線計算）`;
+      const brokers = FS.nodes.filter(d => d.bRank && d.bRank <= o.brokers).sort((a, b) => a.bRank - b.bRank);
+      document.getElementById('fsBrokerList').innerHTML = brokers.length
+        ? brokers.map(d => `${d.bRank}. ${escapeHtml(d.id)}（${d.betweenness}）`).join('<br>')
+        : (o.brokers > 0 ? '網路中沒有中介中心性大於 0 的節點' : '');
+      document.getElementById('fsYearPalette').disabled = o.color !== 'overlay';
+
+      fsTick();
+      fsDrawScreenLegend();
+      fsUpdateExportInfo();
+    }
+
+    function fsRefreshPins() {
+      FS.nodeSel.select('circle.fs-pin')
+        .attr('cy', d => -(fsRadius(d, FS.o) + 6))
+        .attr('display', d => d.pinned ? null : 'none');
+    }
+
+    function fsHighlight(d) {
+      const near = o => o.index === d.index || FS.nbr.has(`${d.index}-${o.index}`);
+      FS.nodeSel.attr('opacity', o => near(o) ? null : 0.15);
+      FS.labelSel.attr('opacity', o => near(o) ? null : 0.15);
+      FS.haloSel.attr('opacity', o => near(o) ? null : 0.15);
+      FS.linkSel.attr('opacity', l => (l.source.index === d.index || l.target.index === d.index) ? null : 0.08);
+    }
+
+    function fsResetHighlight() {
+      if (!FS.nodeSel) return;
+      [FS.nodeSel, FS.labelSel, FS.haloSel, FS.linkSel].forEach(s => s.attr('opacity', null));
+    }
+
+    function fsFit(animate = true) {
+      const svgEl = document.getElementById('fsSvg');
+      const b = FS.gGraph.node().getBBox();
+      if (!b.width || !b.height) return;
+      const W = svgEl.clientWidth, H = svgEl.clientHeight - FS.legendH;
+      const pad = 50;
+      const k = Math.min((W - 2 * pad) / b.width, (H - 2 * pad) / b.height, 4);
+      const t = d3.zoomIdentity.translate(W / 2 - k * (b.x + b.width / 2), H / 2 - k * (b.y + b.height / 2) + 20).scale(k);
+      FS.lastTransform = t;
+      (animate ? d3.select(svgEl).transition().duration(450) : d3.select(svgEl)).call(FS.zoom.transform, t);
+    }
+
+    /**
+     * 繪製圖例（同時供畫面與匯出使用）。回傳 { w, h }。
+     * 內容：色彩編碼、節點/連線編碼說明、橋樑外環說明、宏觀網路指標
+     */
+    function fsBuildLegend(g, o, th, maxWidth) {
+      const zh = o.lang === 'zh';
+      const fs = 12, lh = 20, family = o.font;
+      let y = 0, w = 0;
+      const text = (x, yy, str, opts = {}) => {
+        g.append('text').attr('x', x).attr('y', yy).attr('font-family', family)
+          .attr('font-size', opts.size || fs).attr('font-weight', opts.weight || 400)
+          .attr('fill', opts.fill || th.text).text(str);
+        return fsTextWidth(str, opts.size || fs, family, opts.weight || 400);
+      };
+
+      if (o.showLegend) {
+        if (o.color === 'cluster') {
+          const byCluster = new Map();
+          FS.nodes.forEach(n => {
+            if (!byCluster.has(n.cluster)) byCluster.set(n.cluster, []);
+            byCluster.get(n.cluster).push(n);
+          });
+          const ids = Array.from(byCluster.keys()).sort((a, b) => a - b);
+          const shown = ids.filter(c => c <= CLUSTER_COLORS.length && byCluster.get(c).length >= 2);
+          const rest = ids.filter(c => !shown.includes(c));
+          y += 14;
+          w = Math.max(w, text(0, y, zh ? 'Louvain 主題聚落（節點數；TLS 最高之關鍵字）' : 'Clusters (n of keywords; highest-TLS keyword)', { weight: 700 }));
+          y += 6;
+          let x = 0;
+          let rowY = y + lh - 6;
+          shown.forEach(c => {
+            const members = byCluster.get(c);
+            const top = members.slice().sort((a, b) => b.tls - a.tls)[0];
+            const label = zh ? `C${c}（${members.length}）：${top.id}` : `C${c} (${members.length}): ${top.id}`;
+            const tw = fsTextWidth(label, fs, family) + 26;
+            if (x > 0 && x + tw > maxWidth) { x = 0; rowY += lh; }
+            g.append('circle').attr('cx', x + 6).attr('cy', rowY - 4).attr('r', 6).attr('fill', fsClusterColor(c, th));
+            text(x + 16, rowY, label);
+            x += tw;
+            w = Math.max(w, x);
+          });
+          if (rest.length) {
+            const nodesInRest = rest.reduce((s, c) => s + byCluster.get(c).length, 0);
+            const label = zh ? `其他 ${rest.length} 個小型或單節點聚落（${nodesInRest} 個節點）` : `${rest.length} other small/singleton clusters (${nodesInRest} keywords)`;
+            const tw = fsTextWidth(label, fs, family) + 26;
+            if (x > 0 && x + tw > maxWidth) { x = 0; rowY += lh; }
+            g.append('circle').attr('cx', x + 6).attr('cy', rowY - 4).attr('r', 6).attr('fill', th.other);
+            text(x + 16, rowY, label, { fill: th.muted });
+            w = Math.max(w, x + tw);
+          }
+          y = rowY + 8;
+        } else {
+          const yr = FS.year;
+          y += 14;
+          w = Math.max(w, text(0, y, zh ? '平均發表年份' : 'Average publication year', { weight: 700 }));
+          y += 10;
+          const gid = `fsYearGrad${Math.random().toString(36).slice(2, 7)}`;
+          const grad = g.append('defs').append('linearGradient').attr('id', gid);
+          for (let i = 0; i <= 10; i++) grad.append('stop').attr('offset', `${i * 10}%`).attr('stop-color', yr.interp(i / 10));
+          g.append('rect').attr('x', 0).attr('y', y).attr('width', 220).attr('height', 12).attr('fill', `url(#${gid})`);
+          y += 28;
+          text(0, y, yr.hasYears ? yr.minYear.toFixed(1) : '—', { fill: th.muted });
+          const maxStr = yr.hasYears ? yr.maxYear.toFixed(1) : '—';
+          text(220 - fsTextWidth(maxStr, fs, family), y, maxStr, { fill: th.muted });
+          w = Math.max(w, 230);
+          if (FS.nodes.some(n => n.avgYear == null)) {
+            g.append('circle').attr('cx', 246).attr('cy', y - 16).attr('r', 6).attr('fill', th.noYear);
+            w = Math.max(w, 256 + text(256, y - 12, zh ? '無年份資料' : 'No year data', { fill: th.muted }));
+          }
+          y += 8;
+        }
+
+        // 編碼說明
+        y += lh;
+        let enc = zh ? '節點大小＝出現篇數；連線粗細＝共現次數' : 'Node size = occurrences; link width = co-occurrence frequency';
+        if (o.linkMinW > 1) enc += zh ? `；僅顯示共現次數 ≥ ${o.linkMinW} 的連線` : `; links with co-occurrence ≥ ${o.linkMinW} shown`;
+        w = Math.max(w, text(0, y, enc, { fill: th.muted }));
+        if (o.brokers > 0 && FS.nodes.some(n => n.bRank && n.bRank <= o.brokers)) {
+          y += lh;
+          g.append('circle').attr('cx', 7).attr('cy', y - 4).attr('r', 5).attr('fill', th.muted);
+          g.append('circle').attr('cx', 7).attr('cy', y - 4).attr('r', 8).attr('fill', 'none').attr('stroke', th.broker).attr('stroke-width', 2.2);
+          w = Math.max(w, 22 + text(22, y, zh ? `外環＝中介中心性前 ${o.brokers} 名（結構橋樑）` : `Ring = top ${o.brokers} betweenness centrality (structural brokers)`, { fill: th.muted }));
+        }
+      }
+
+      if (o.showStats && computedSnaResults.macro) {
+        const m = computedSnaResults.macro;
+        const minOcc = Math.min(...FS.nodes.map(n => n.occurrences));
+        y += lh;
+        const s = zh
+          ? `節點 ${m.N}｜連線 ${m.L}｜網路密度 ${m.density.toFixed(3)}｜聚落 ${m.clusterCount}｜模組度 Q = ${m.modularityQ.toFixed(3)}｜入圖門檻：出現篇數 ≥ ${minOcc}`
+          : `Nodes = ${m.N}; Links = ${m.L}; Density = ${m.density.toFixed(3)}; Clusters = ${m.clusterCount}; Modularity Q = ${m.modularityQ.toFixed(3)}; Min. occurrences = ${minOcc}`;
+        w = Math.max(w, text(0, y, s, { fill: th.muted }));
+        const ci = m.clusterInfo;
+        if (ci) {
+          y += lh;
+          let line = clusterMethodText(ci, zh ? 'zh' : 'en');
+          if (ci.stability) {
+            const st = ci.stability;
+            line += zh
+              ? `；穩定性：${st.runs} 次重複中 ${st.identicalPct.toFixed(0)}% 相同，平均 ARI = ${st.meanARI.toFixed(3)}`
+              : `; stability: ${st.identicalPct.toFixed(0)}% of ${st.runs} randomized runs identical, mean ARI = ${st.meanARI.toFixed(3)}`;
+          }
+          w = Math.max(w, text(0, y, line, { fill: th.muted }));
+        }
+      }
+      return { w, h: y > 0 ? y + 6 : 0 };
+    }
+
+    function fsDrawScreenLegend() {
+      const o = FS.o, th = FS_THEMES[o.theme];
+      FS.gOverlay.selectAll('*').remove();
+      if (!o.showLegend && !o.showStats) { FS.legendH = 0; return; }
+      const svgEl = document.getElementById('fsSvg');
+      const maxW = Math.min(svgEl.clientWidth - 48, 1100);
+      const bg = FS.gOverlay.append('rect');
+      const g = FS.gOverlay.append('g');
+      const { w, h } = fsBuildLegend(g, o, th, maxW);
+      const pad = 10;
+      const x0 = 14, y0 = svgEl.clientHeight - h - 2 * pad - 12;
+      g.attr('transform', `translate(${x0 + pad},${y0 + pad})`);
+      bg.attr('x', x0).attr('y', y0).attr('width', w + 2 * pad).attr('height', h + 2 * pad)
+        .attr('rx', 8).attr('fill', th.legendBg).attr('stroke', th.legendBorder);
+      FS.legendH = h + 2 * pad + 12;
+    }
+
+    /** 組出獨立的匯出用 SVG（整張網路圖 + 標題 + 圖例），不受畫面縮放影響 */
+    function fsBuildExportSvg() {
+      const o = FS.o, th = FS_THEMES[o.theme];
+      fsResetHighlight();
+      const b = FS.gGraph.node().getBBox();
+      const pad = 40;
+      const titleH = o.title ? 40 : 0;
+      let W = Math.max(Math.ceil(b.width + 2 * pad), 720);
+
+      const legendG = d3.create('svg:g');
+      let lg = { w: 0, h: 0 };
+      if (o.showLegend || o.showStats) lg = fsBuildLegend(legendG, o, th, W - 2 * pad);
+      W = Math.max(W, Math.ceil(lg.w + 2 * pad));
+      const H = Math.ceil(pad + titleH + b.height + (lg.h ? 28 + lg.h : 0) + pad);
+
+      const svg = d3.create('svg')
+        .attr('xmlns', 'http://www.w3.org/2000/svg')
+        .attr('width', W).attr('height', H).attr('viewBox', `0 0 ${W} ${H}`)
+        .attr('font-family', o.font);
+      if (!o.transparent) svg.append('rect').attr('width', W).attr('height', H).attr('fill', th.bg);
+      if (o.title) {
+        svg.append('text').attr('x', W / 2).attr('y', pad + 22).attr('text-anchor', 'middle')
+          .attr('font-family', o.font).attr('font-size', 22).attr('font-weight', 700).attr('fill', th.text).text(o.title);
+      }
+      const clone = FS.gGraph.node().cloneNode(true);
+      clone.querySelectorAll('.ui-only, [display="none"]').forEach(el => el.remove());
+      clone.querySelectorAll('[class]').forEach(el => el.removeAttribute('class'));
+      clone.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+      clone.removeAttribute('class');
+      clone.setAttribute('transform', `translate(${((W - b.width) / 2 - b.x).toFixed(1)},${(pad + titleH - b.y).toFixed(1)})`);
+      svg.node().appendChild(clone);
+      if (lg.h) {
+        legendG.attr('transform', `translate(${pad},${(pad + titleH + b.height + 28).toFixed(1)})`);
+        svg.node().appendChild(legendG.node());
+      }
+      const str = new XMLSerializer().serializeToString(svg.node());
+      return { svgString: '<?xml version="1.0" encoding="UTF-8"?>\n' + str, W, H };
+    }
+
+    function fsPngSize(W, H, scale) {
+      const MAXPX = 12000;
+      const s = Math.max(W, H) * scale > MAXPX ? MAXPX / Math.max(W, H) : scale;
+      return { s, pw: Math.round(W * s), ph: Math.round(H * s) };
+    }
+
+    function fsUpdateExportInfo() {
+      if (!FS.open || !FS.gGraph) return;
+      const o = FS.o;
+      const b = FS.gGraph.node().getBBox();
+      const W = Math.max(Math.ceil(b.width + 80), 720);
+      const H = Math.ceil(b.height + 80 + (o.title ? 40 : 0) + (FS.legendH ? FS.legendH + 10 : 0));
+      const { pw, ph, s } = fsPngSize(W, H, o.pngScale);
+      const cm = v => (v / 300 * 2.54).toFixed(1);
+      document.getElementById('fsExportInfo').innerHTML =
+        `預估 PNG：約 <b>${pw.toLocaleString()} × ${ph.toLocaleString()}</b> px` +
+        `${s < o.pngScale ? '（已依瀏覽器上限自動降低倍率）' : ''}<br>以 300 DPI 計，列印尺寸約 ${cm(pw)} × ${cm(ph)} cm`;
+    }
+
+    // PNG pHYs 區塊：寫入 DPI 解析度，使 Word / PowerPoint 依正確實體尺寸置入
+    const FS_CRC_TABLE = (() => {
+      const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+      return t;
+    })();
+    function fsCrc32(bytes) {
+      let c = 0xffffffff;
+      for (let i = 0; i < bytes.length; i++) c = FS_CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    }
+    async function fsSetPngDpi(blob, dpi) {
+      const src = new Uint8Array(await blob.arrayBuffer());
+      const ppm = Math.round(dpi / 0.0254);
+      const chunk = new Uint8Array(21);
+      const dv = new DataView(chunk.buffer);
+      dv.setUint32(0, 9);
+      chunk.set([0x70, 0x48, 0x59, 0x73], 4); // 'pHYs'
+      dv.setUint32(8, ppm); dv.setUint32(12, ppm); chunk[16] = 1;
+      dv.setUint32(17, fsCrc32(chunk.subarray(4, 17)));
+      const at = 33; // PNG 簽章 8 bytes + IHDR 區塊 25 bytes
+      const out = new Uint8Array(src.length + chunk.length);
+      out.set(src.subarray(0, at), 0); out.set(chunk, at); out.set(src.subarray(at), at + chunk.length);
+      return new Blob([out], { type: 'image/png' });
+    }
+
+    function fsExportSvg() {
+      const { svgString } = fsBuildExportSvg();
+      const mode = FS.o.color === 'overlay' ? 'Overlay' : 'Cluster';
+      triggerDownload(new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' }), `SNA_Network_${mode}_${getTimestampStr()}.svg`);
+    }
+
+    async function fsExportPng() {
+      const btn = document.getElementById('fsBtnPng');
+      const label = btn.textContent;
+      btn.disabled = true; btn.textContent = '⏳ 產生中...';
+      try {
+        const { svgString, W, H } = fsBuildExportSvg();
+        const { pw, ph } = fsPngSize(W, H, FS.o.pngScale);
+        const url = URL.createObjectURL(new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' }));
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+        const canvas = document.createElement('canvas');
+        canvas.width = pw; canvas.height = ph;
+        canvas.getContext('2d').drawImage(img, 0, 0, pw, ph);
+        URL.revokeObjectURL(url);
+        const raw = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        if (!raw) throw new Error('canvas');
+        const blob = await fsSetPngDpi(raw, 300);
+        const mode = FS.o.color === 'overlay' ? 'Overlay' : 'Cluster';
+        triggerDownload(blob, `SNA_Network_${mode}_${pw}x${ph}_300dpi_${getTimestampStr()}.png`);
+      } catch (err) {
+        alert('PNG 產生失敗，可能是圖片尺寸超過瀏覽器上限，請降低放大倍率後再試一次。');
+      } finally {
+        btn.disabled = false; btn.textContent = label;
+      }
+    }
+
+    document.getElementById('btnOpenFullscreen').addEventListener('click', openFullscreen);
+    document.getElementById('fsBtnClose').addEventListener('click', closeFullscreen);
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      if (DP.open) { closeDocPanel(); return; }   // 先關文獻面板，再按一次才關全螢幕
+      if (!document.getElementById('sensModal').classList.contains('hidden')) { closeSensModal(); return; }
+      if (FS.open) closeFullscreen();
+    });
+    document.getElementById('fsBtnFit').addEventListener('click', () => fsFit());
+    document.getElementById('fsBtnUnpinAll').addEventListener('click', () => {
+      FS.nodes.forEach(n => { n.fx = null; n.fy = null; n.pinned = false; });
+      fsRefreshPins();
+      FS.sim.alpha(0.4).restart();
+    });
+    document.getElementById('fsBtnRelayout').addEventListener('click', () => {
+      const svgEl = document.getElementById('fsSvg');
+      const t = d3.zoomTransform(svgEl);
+      const [cx, cy] = t.invert([svgEl.clientWidth / 2, svgEl.clientHeight / 2]);
+      FS.nodes.forEach(n => {
+        if (n.pinned) return;
+        n.x = cx + (Math.random() - 0.5) * 400; n.y = cy + (Math.random() - 0.5) * 300; n.vx = 0; n.vy = 0;
+      });
+      FS.fitted = false;
+      FS.sim.alpha(1).restart();
+    });
+    document.querySelectorAll('#fsModal .fs-ctl').forEach(el => {
+      const evt = (el.type === 'range' || el.type === 'text') ? 'input' : 'change';
+      el.addEventListener(evt, () => {
+        if (!FS.open) return;
+        fsRender();
+        if (FS_LAYOUT_IDS.has(el.id)) fsApplyForces(0.5);
+      });
+    });
+    document.getElementById('fsBtnSvg').addEventListener('click', fsExportSvg);
+    document.getElementById('fsBtnPng').addEventListener('click', fsExportPng);
+    window.addEventListener('resize', () => { if (FS.open) fsDrawScreenLegend(); });
+
+    /********************************************************************
+     * 文獻明細面板：查看構成節點或連線的文獻
+     * 節點清單 = 該關鍵字（含整併進來的同義詞）出現的文獻，篇數等於節點出現篇數
+     * 連線清單 = 兩個關鍵字共同出現的文獻，篇數等於連線共現次數
+     ********************************************************************/
+    const DP = { open: false, kind: '', title: '', items: [], terms: [] };
+
+    function dpFirstAuthor(doc) {
+      const list = (doc['Authors'] || '').split(';').map(s => s.trim()).filter(Boolean);
+      if (list.length === 0) return '（無作者資料）';
+      return list.length > 1 ? `${list[0]} et al.` : list[0];
+    }
+    function dpDoi(doc) {
+      return (doc['DOI'] || '').trim().replace(/^https?:\/\/(dx\.)?doi\.org\//i, '');
+    }
+    function dpPages(doc) {
+      const bp = (doc['Page start'] || '').trim(), ep = (doc['Page end'] || '').trim();
+      if (bp && ep) return `${bp}–${ep}`;
+      return bp || (doc['Art. No.'] || '').trim();
+    }
+    function dpCited(doc) { const v = parseInt(doc['Cited by'], 10); return isNaN(v) ? 0 : v; }
+
+    function openDocPanelForNode(idx) {
+      const r = computedSnaResults;
+      if (!r || !r.nodeDocs) return;
+      const n = r.nodes[idx];
+      DP.kind = 'node';
+      DP.terms = [n.id];
+      DP.title = n.id;
+      DP.items = r.nodeDocs[idx].map(x => ({ doc: x.doc, matched: [{ term: n.id, raws: x.raws }] }));
+      const color = CLUSTER_COLORS[(n.cluster - 1) % CLUSTER_COLORS.length];
+      DP.metaHtml = `
+        <span class="px-2 py-0.5 rounded-full text-white font-bold" style="background:${color}">C${n.cluster}</span>
+        <span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-semibold">${DP.items.length} 篇文獻</span>
+        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">TLS ${n.tls}</span>
+        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">中介中心性 ${n.betweenness}</span>
+        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">平均年份 ${n.avgYear ?? '—'}</span>
+        <span class="px-2 py-0.5 rounded bg-slate-100 ${stabilityClass(n.stability)}">分群穩定度 ${n.stability == null ? '—' : n.stability.toFixed(2)}</span>`;
+      showDocPanel('節點：構成此關鍵字的文獻');
+    }
+
+    function openDocPanelForLink(a, b) {
+      const r = computedSnaResults;
+      if (!r || !r.nodeDocs) return;
+      const na = r.nodes[a], nb = r.nodes[b];
+      const rawsInB = new Map(r.nodeDocs[b].map(x => [x.doc, x.raws]));
+      DP.kind = 'link';
+      DP.terms = [na.id, nb.id];
+      DP.title = `${na.id}  ↔  ${nb.id}`;
+      DP.items = r.nodeDocs[a].filter(x => rawsInB.has(x.doc)).map(x => ({
+        doc: x.doc,
+        matched: [{ term: na.id, raws: x.raws }, { term: nb.id, raws: rawsInB.get(x.doc) }]
+      }));
+      DP.metaHtml = `
+        <span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-semibold">共現 ${DP.items.length} 篇文獻</span>
+        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">${escapeHtml(na.id)}：${na.occurrences} 篇</span>
+        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">${escapeHtml(nb.id)}：${nb.occurrences} 篇</span>`;
+      showDocPanel('連線：兩個關鍵字共同出現的文獻');
+    }
+
+    function showDocPanel(kindLabel) {
+      document.getElementById('docPanelKind').textContent = kindLabel;
+      document.getElementById('docPanelTitle').textContent = DP.title;
+      document.getElementById('docPanelMeta').innerHTML = DP.metaHtml;
+      const panel = document.getElementById('docPanel');
+      panel.style.right = FS.open ? '20rem' : '0';  // 全螢幕模式時避開右側控制欄
+      panel.classList.remove('hidden');
+      DP.open = true;
+      renderDocPanelList();
+      document.getElementById('docPanelList').scrollTop = 0;
+    }
+
+    function closeDocPanel() {
+      document.getElementById('docPanel').classList.add('hidden');
+      DP.open = false;
+    }
+
+    function dpSortedItems() {
+      const mode = document.getElementById('docPanelSort').value;
+      const yr = it => parseInt(it.doc['Year'], 10) || 0;
+      const items = DP.items.slice();
+      if (mode === 'year_desc') items.sort((x, y) => yr(y) - yr(x) || dpFirstAuthor(x.doc).localeCompare(dpFirstAuthor(y.doc)));
+      if (mode === 'year_asc') items.sort((x, y) => yr(x) - yr(y) || dpFirstAuthor(x.doc).localeCompare(dpFirstAuthor(y.doc)));
+      if (mode === 'cited_desc') items.sort((x, y) => dpCited(y.doc) - dpCited(x.doc) || yr(y) - yr(x));
+      if (mode === 'author') items.sort((x, y) => dpFirstAuthor(x.doc).localeCompare(dpFirstAuthor(y.doc)) || yr(x) - yr(y));
+      return items;
+    }
+
+    function renderDocPanelList() {
+      const list = document.getElementById('docPanelList');
+      const items = dpSortedItems();
+      if (items.length === 0) {
+        list.innerHTML = '<li class="p-6 text-center text-slate-400">沒有符合的文獻</li>';
+        return;
+      }
+      list.innerHTML = items.map((it, i) => {
+        const d = it.doc;
+        const doi = dpDoi(d);
+        const vol = (d['Volume'] || '').trim(), iss = (d['Issue'] || '').trim(), pages = dpPages(d);
+        const srcBits = [escapeHtml(d['Source title'] || '')];
+        if (vol) srcBits.push(`${escapeHtml(vol)}${iss ? `(${escapeHtml(iss)})` : ''}`);
+        if (pages) srcBits.push(escapeHtml(pages));
+        const chips = it.matched.map(m => m.raws.map(raw => {
+          const merged = raw !== m.term;
+          return `<span class="px-1.5 py-0.5 rounded ${merged ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600'}"
+            title="${merged ? escapeHtmlAttr(`原始關鍵字「${raw}」經整併歸入「${m.term}」`) : '原始關鍵字'}">${escapeHtml(raw)}${merged ? ` → ${escapeHtml(m.term)}` : ''}</span>`;
+        }).join('')).join('');
+        const link = doi
+          ? `<a href="https://doi.org/${encodeURI(doi)}" target="_blank" rel="noopener" class="text-indigo-600 hover:underline break-all">doi.org/${escapeHtml(doi)}</a>`
+          : ((d['Link'] || '').trim() ? `<a href="${escapeHtmlAttr(d['Link'].trim())}" target="_blank" rel="noopener" class="text-indigo-600 hover:underline">原始連結</a>` : '<span class="text-slate-400">無 DOI</span>');
+        const abs = (d['Abstract'] || '').trim();
+        return `
+          <li class="px-4 py-3 flex gap-3 hover:bg-slate-50">
+            <span class="text-slate-400 font-bold w-6 shrink-0 text-right">${i + 1}</span>
+            <div class="min-w-0 space-y-1">
+              <div class="font-semibold text-slate-900">${escapeHtml(dpFirstAuthor(d))} (${escapeHtml(d['Year'] || 'n.d.')})</div>
+              <div class="text-slate-800 leading-snug">${escapeHtml(d['Title'] || '（無標題）')}</div>
+              <div class="text-slate-500 italic">${srcBits.filter(Boolean).join(', ')}</div>
+              <div class="flex flex-wrap items-center gap-1 text-[11px]">${chips}</div>
+              <div class="flex flex-wrap items-center gap-x-3 text-[11px] text-slate-500">
+                <span>被引 ${dpCited(d)}</span>
+                <span>${escapeHtml(d._source || '')}</span>
+                ${link}
+              </div>
+              ${abs ? `<details class="text-[11px] text-slate-600"><summary class="cursor-pointer text-slate-500 hover:text-slate-800 select-none">摘要</summary><p class="mt-1 leading-relaxed">${escapeHtml(abs)}</p></details>` : ''}
+            </div>
+          </li>`;
+      }).join('');
+    }
+
+    function exportDocPanelCsv() {
+      const rows = dpSortedItems().map((it, i) => {
+        const d = it.doc, doi = dpDoi(d);
+        return {
+          No: i + 1,
+          First_Author: dpFirstAuthor(d),
+          Authors: d['Authors'] || '',
+          Year: d['Year'] || '',
+          Title: d['Title'] || '',
+          Source_Title: d['Source title'] || '',
+          Volume: d['Volume'] || '',
+          Issue: d['Issue'] || '',
+          Pages_or_Article_No: dpPages(d),
+          DOI: doi,
+          DOI_URL: doi ? `https://doi.org/${doi}` : '',
+          Cited_By: dpCited(d),
+          Matched_Raw_Keywords: it.matched.map(m => `${m.term}: ${m.raws.join(' | ')}`).join(' ; '),
+          Database: d._source || '',
+          Source_File: d._fileName || ''
+        };
+      });
+      const safe = s => s.replace(/[^a-z0-9一-龥]+/gi, '_').replace(/^_|_$/g, '').slice(0, 40);
+      const name = DP.kind === 'link'
+        ? `Docs_Link_${safe(DP.terms[0])}__${safe(DP.terms[1])}_${getTimestampStr()}.csv`
+        : `Docs_Node_${safe(DP.terms[0])}_${getTimestampStr()}.csv`;
+      triggerDownload(new Blob(['﻿' + Papa.unparse(rows)], { type: 'text/csv;charset=utf-8;' }), name);
+    }
+
+    document.getElementById('docPanelClose').addEventListener('click', closeDocPanel);
+    document.getElementById('docPanelSort').addEventListener('change', renderDocPanelList);
+    document.getElementById('docPanelCsv').addEventListener('click', exportDocPanelCsv);
+    document.getElementById('snaMetricsTableBody').addEventListener('click', e => {
+      const tr = e.target.closest('tr[data-term]');
+      if (!tr || !computedSnaResults) return;
+      const idx = computedSnaResults.nodeMap.get(tr.dataset.term);
+      if (idx !== undefined) openDocPanelForNode(idx);
+    });
+
+    /********************************************************************
+     * 分群敏感度分析
+     * 比較基準 = 目前畫面上的分群（目前的邊權重、γ 與入圖門檻）
+     * 對每組設定：以 selectSnaEntries 取得節點、重建共現矩陣、執行 assignLouvainClusters（含 100 次穩定性檢驗）
+     * - 與目前分群的 ARI：以兩組設定共同包含的關鍵字計算
+     * - 關鍵字跨設定一致度：關鍵字在目前分群中的聚落與在各設定中的聚落（限共同關鍵字）之 Jaccard 相似度平均，
+     *   不含與目前設定完全相同的那一組
+     ********************************************************************/
+    const SENS = { results: null, running: false };
+    const SENS_CORE = 0.7;
+
+    function buildCoocNetwork(minOcc) {
+      const mergedFreqMap = computeMergedFreqMap();
+      const mode = document.getElementById('selectKwMode').value;
+      const entries = selectSnaEntries(mergedFreqMap, minOcc);
+      const N = entries.length;
+      const nodeMap = new Map(entries.map(([t], i) => [t, i]));
+      const matrix = Array.from({ length: N }, () => new Array(N).fill(0));
+      for (const doc of activeDocs) {
+        const targets = new Set();
+        for (const k of extractRawKeywordsFromDoc(doc, mode)) {
+          if (userExcludeSet.has(k)) continue;
+          const t = getEffectiveTargetTerm(k);
+          if (nodeMap.has(t)) targets.add(nodeMap.get(t));
+        }
+        const arr = Array.from(targets);
+        for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+          matrix[arr[i]][arr[j]] += 1; matrix[arr[j]][arr[i]] += 1;
+        }
+      }
+      return { ids: entries.map(([t]) => t), occ: entries.map(([, c]) => c), matrix, N };
+    }
+
+    const parseNumList = (str, isInt) => Array.from(new Set(
+      str.split(/[,，、\s]+/).map(v => (isInt ? parseInt(v, 10) : parseFloat(v))).filter(v => isFinite(v) && v > 0)
+    )).sort((a, b) => a - b);
+
+    const weightLabel = w => (w === 'assoc' ? 'Association strength' : '原始共現次數');
+
+    function openSensModal() {
+      if (!computedSnaResults) return;
+      const m = computedSnaResults.macro;
+      document.getElementById('sensMinOccs').value = m.minOcc;
+      document.getElementById('sensRefInfo').innerHTML =
+        `<b>比較基準（目前分群）：</b>邊權重 ${weightLabel(m.clusterInfo.weightMode)}、γ = ${m.clusterInfo.gamma}、入圖門檻 ≥ ${m.minOcc} 篇、${m.N} 個節點、${m.clusterCount} 個聚落。若要改變基準，請先在步驟三調整設定，再開啟本視窗。`;
+      if (SENS.results && SENS.results.refToken !== computedSnaResults) {
+        SENS.results = null;
+        document.getElementById('sensResults').classList.add('hidden');
+      }
+      document.getElementById('sensModal').classList.remove('hidden');
+    }
+    function closeSensModal() { document.getElementById('sensModal').classList.add('hidden'); }
+
+    // 將某設定的聚落編號，依與目前聚落的重疊程度一對一對應（貪婪法），方便閱讀
+    function alignClusters(refById, cfgById, common) {
+      const overlap = new Map();
+      for (const id of common) {
+        const key = `${cfgById.get(id)}|${refById.get(id)}`;
+        overlap.set(key, (overlap.get(key) || 0) + 1);
+      }
+      const pairs = Array.from(overlap.entries()).map(([k, v]) => { const [c, r] = k.split('|').map(Number); return { c, r, v }; })
+        .sort((a, b) => b.v - a.v || a.r - b.r);
+      const map = new Map(), usedR = new Set();
+      for (const p of pairs) if (!map.has(p.c) && !usedR.has(p.r)) { map.set(p.c, `C${p.r}`); usedR.add(p.r); }
+      let extra = 0;
+      const label = c => { if (!map.has(c)) map.set(c, `新${++extra}`); return map.get(c); };
+      return label;
+    }
+
+    async function runSensitivity() {
+      if (SENS.running || !computedSnaResults) return;
+      const r = computedSnaResults, m = r.macro;
+      const gammas = parseNumList(document.getElementById('sensGammas').value, false);
+      const minOccs = parseNumList(document.getElementById('sensMinOccs').value, true);
+      const weights = [];
+      if (document.getElementById('sensWAssoc').checked) weights.push('assoc');
+      if (document.getElementById('sensWRaw').checked) weights.push('raw');
+      if (!gammas.length || !minOccs.length || !weights.length) { alert('請至少設定一個 γ 值、一個入圖門檻與一種邊權重。'); return; }
+      const configs = [];
+      for (const w of weights) for (const mo of minOccs) for (const g of gammas) configs.push({ weightMode: w, minOcc: mo, gamma: g });
+      if (configs.length > 60) { alert(`目前共 ${configs.length} 組設定，請減少至 60 組以內。`); return; }
+
+      SENS.running = true;
+      const btn = document.getElementById('sensRun'), prog = document.getElementById('sensProgress');
+      btn.disabled = true;
+      const refById = new Map(r.nodes.map(n => [n.id, n.cluster]));
+      const refIds = r.nodes.map(n => n.id);
+      const nets = new Map();
+      const consSum = new Map(refIds.map(id => [id, 0])), consCnt = new Map(refIds.map(id => [id, 0]));
+
+      for (let k = 0; k < configs.length; k++) {
+        const c = configs[k];
+        prog.textContent = `計算中 ${k + 1} / ${configs.length}…`;
+        await new Promise(res => setTimeout(res, 0));
+        if (!nets.has(c.minOcc)) nets.set(c.minOcc, buildCoocNetwork(c.minOcc));
+        const net = nets.get(c.minOcc);
+        const tmpNodes = net.ids.map((id, i) => ({ id, occurrences: net.occ[i] }));
+        const info = assignLouvainClusters(tmpNodes, net.matrix, net.N, { weightMode: c.weightMode, gamma: c.gamma });
+        const cfgById = new Map(tmpNodes.map(n => [n.id, n.cluster]));
+        const common = refIds.filter(id => cfgById.has(id));
+        c.N = net.N;
+        c.clusterCount = new Set(tmpNodes.map(n => n.cluster)).size;
+        c.Q = info.Q;
+        c.stabARI = info.stability ? info.stability.meanARI : null;
+        c.common = common.length;
+        c.ari = common.length >= 2 ? adjustedRandIndex(common.map(id => refById.get(id)), common.map(id => cfgById.get(id))) : null;
+        c.isRef = c.weightMode === m.clusterInfo.weightMode && Math.abs(c.gamma - m.clusterInfo.gamma) < 1e-9 && c.minOcc === m.minOcc;
+        const label = alignClusters(refById, cfgById, common);
+        c.labels = new Map(common.map(id => [id, label(cfgById.get(id))]));
+        if (!c.isRef) {
+          const commonSet = new Set(common);
+          for (const id of common) {
+            const refSet = refIds.filter(j => commonSet.has(j) && refById.get(j) === refById.get(id));
+            const cfgSet = new Set(common.filter(j => cfgById.get(j) === cfgById.get(id)));
+            const inter = refSet.filter(j => cfgSet.has(j)).length;
+            consSum.set(id, consSum.get(id) + inter / (refSet.length + cfgSet.size - inter));
+            consCnt.set(id, consCnt.get(id) + 1);
+          }
+        }
+      }
+
+      const consistency = new Map(refIds.map(id => [id, consCnt.get(id) ? consSum.get(id) / consCnt.get(id) : null]));
+      SENS.results = { configs, consistency, consCnt, refById, refIds, refToken: computedSnaResults };
+      prog.textContent = `完成，共 ${configs.length} 組設定`;
+      btn.disabled = false;
+      SENS.running = false;
+      renderSensResults();
+    }
+
+    function renderSensResults() {
+      const { configs, consistency, consCnt, refById, refIds } = SENS.results;
+      const r = computedSnaResults;
+      const others = configs.filter(c => !c.isRef && c.ari != null);
+      const aris = others.map(c => c.ari).sort((a, b) => a - b);
+      const median = aris.length ? (aris.length % 2 ? aris[(aris.length - 1) / 2] : (aris[aris.length / 2 - 1] + aris[aris.length / 2]) / 2) : null;
+      const kc = configs.map(c => c.clusterCount);
+      const vals = refIds.map(id => consistency.get(id)).filter(v => v != null);
+      const core = vals.filter(v => v >= SENS_CORE).length;
+      const missingRef = configs.some(c => c.isRef) ? '' : '（比較設定中未包含目前設定本身）';
+
+      const med = arr => { const x = arr.slice().sort((p, q) => p - q); const n = x.length; return n % 2 ? x[(n - 1) / 2] : (x[n / 2 - 1] + x[n / 2]) / 2; };
+      // 依「邊權重 × 入圖門檻」分組摘要，避免不同維度的變化混在同一個數字裡
+      const groups = new Map();
+      configs.forEach(c => {
+        const key = `${c.weightMode}|${c.minOcc}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(c);
+      });
+      const groupLines = groups.size > 1 ? Array.from(groups.values()).map(g => {
+        const gs = g.map(c => c.gamma), ga = g.filter(c => !c.isRef && c.ari != null).map(c => c.ari);
+        const gk = g.map(c => c.clusterCount);
+        const hasRef = g.some(c => c.isRef);
+        return `<li>${weightLabel(g[0].weightMode)}、門檻 ≥ ${g[0].minOcc}（${g[0].N} 個節點；γ ${Math.min(...gs)}–${Math.max(...gs)}）：` +
+          (ga.length ? `ARI 中位數 <b>${med(ga).toFixed(3)}</b>（${Math.min(...ga).toFixed(3)}–${Math.max(...ga).toFixed(3)}）` : '僅含目前設定') +
+          `；聚落數 ${Math.min(...gk)}–${Math.max(...gk)}${hasRef ? '（含目前設定）' : ''}</li>`;
+      }).join('') : '';
+      const coreText = core === vals.length
+        ? `<b>全部 ${core} 個</b>關鍵字的跨設定一致度皆 ≥ ${SENS_CORE.toFixed(2)}，在這些設定下都穩定歸屬同一聚落。`
+        : `<b>${core} 個（${(core / Math.max(1, vals.length) * 100).toFixed(0)}%）</b>的跨設定一致度 ≥ ${SENS_CORE.toFixed(2)}，可視為核心詞；其餘 ${vals.length - core} 個為隨設定改變歸屬的邊界詞。`;
+
+      document.getElementById('sensSummary').innerHTML = others.length
+        ? `<b>摘要：</b>共比較 ${others.length} 組設定${missingRef}。與目前分群的 ARI 中位數為 <b>${median.toFixed(3)}</b>（範圍 ${aris[0].toFixed(3)}–${aris[aris.length - 1].toFixed(3)}）；聚落數介於 ${Math.min(...kc)}–${Math.max(...kc)} 個。目前 ${refIds.length} 個關鍵字中，${coreText}ARI 越接近 1，表示該設定的分群與目前分群越一致。` +
+          (groupLines ? `<div class="mt-2"><b>分組結果</b>（以上整體數字混合了不同邊權重或門檻，請優先參考分組結果）：<ul class="list-disc pl-5 mt-1 space-y-0.5">${groupLines}</ul></div>` : '')
+        : '<b>摘要：</b>沒有可供比較的其他設定，請增加 γ 值、門檻或邊權重選項。';
+
+      document.getElementById('sensConfigBody').innerHTML = configs.map(c => `
+        <tr class="${c.isRef ? 'bg-indigo-50 font-semibold' : ''}">
+          <td class="py-1.5 px-2.5">${weightLabel(c.weightMode)}${c.isRef ? ' <span class="text-indigo-700">（目前設定）</span>' : ''}</td>
+          <td class="py-1.5 px-2 text-right">${c.gamma}</td>
+          <td class="py-1.5 px-2 text-right">≥ ${c.minOcc}</td>
+          <td class="py-1.5 px-2 text-right">${c.N}</td>
+          <td class="py-1.5 px-2 text-right">${c.clusterCount}</td>
+          <td class="py-1.5 px-2 text-right">${c.Q.toFixed(3)}</td>
+          <td class="py-1.5 px-2 text-right">${c.stabARI == null ? '—' : c.stabARI.toFixed(3)}</td>
+          <td class="py-1.5 px-2 text-right ${c.ari == null ? '' : c.ari < 0.5 ? 'text-rose-600' : c.ari < 0.8 ? 'text-amber-600' : 'text-emerald-700'}">${c.ari == null ? '—' : c.ari.toFixed(3)}</td>
+          <td class="py-1.5 px-2.5 text-right">${c.common}</td>
+        </tr>`).join('');
+
+      const byCluster = new Map();
+      r.nodes.forEach(n => { if (!byCluster.has(n.cluster)) byCluster.set(n.cluster, []); byCluster.get(n.cluster).push(n); });
+      const ids = Array.from(byCluster.keys()).sort((a, b) => a - b);
+      document.getElementById('sensClusterList').innerHTML = ids.map(cid => {
+        const members = byCluster.get(cid).slice().sort((a, b) => (consistency.get(b.id) ?? -1) - (consistency.get(a.id) ?? -1) || b.tls - a.tls);
+        const color = CLUSTER_COLORS[(cid - 1) % CLUSTER_COLORS.length];
+        const chip = n => {
+          const v = consistency.get(n.id);
+          const cls = v == null ? 'bg-slate-100 text-slate-500' : v >= SENS_CORE ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : v >= 0.5 ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-rose-50 text-rose-900 border border-rose-200';
+          return `<span class="px-2 py-0.5 rounded ${cls}" title="${v == null ? '沒有可比較的設定' : `跨 ${consCnt.get(n.id)} 組設定的平均一致度`}">${escapeHtml(n.id)} <b>${v == null ? '—' : v.toFixed(2)}</b></span>`;
+        };
+        const coreM = members.filter(n => (consistency.get(n.id) ?? 0) >= SENS_CORE);
+        const edgeM = members.filter(n => !((consistency.get(n.id) ?? 0) >= SENS_CORE));
+        return `
+          <div class="border border-slate-200 rounded-lg p-3">
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="px-2 py-0.5 rounded-full text-white font-bold text-[11px]" style="background:${color}">C${cid}</span>
+              <span class="text-slate-600">${members.length} 個關鍵字；核心 ${coreM.length} 個、邊界 ${edgeM.length} 個</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 text-[11px]">${coreM.map(chip).join('')}${edgeM.length ? `<span class="text-slate-400 px-1">｜邊界：</span>${edgeM.map(chip).join('')}` : ''}</div>
+          </div>`;
+      }).join('');
+      document.getElementById('sensResults').classList.remove('hidden');
+    }
+
+    function exportSensConfigsCsv() {
+      if (!SENS.results) return;
+      const rows = SENS.results.configs.map(c => ({
+        Edge_Weight: c.weightMode === 'assoc' ? 'association strength' : 'raw co-occurrence',
+        Resolution_Gamma: c.gamma,
+        Min_Occurrences: c.minOcc,
+        Nodes: c.N,
+        Clusters: c.clusterCount,
+        Modularity_Q: +c.Q.toFixed(4),
+        Stability_Mean_ARI_100_runs: c.stabARI == null ? '' : +c.stabARI.toFixed(4),
+        ARI_vs_Current: c.ari == null ? '' : +c.ari.toFixed(4),
+        Common_Nodes: c.common,
+        Is_Current_Setting: c.isRef ? 'yes' : ''
+      }));
+      triggerDownload(new Blob(['﻿' + Papa.unparse(rows)], { type: 'text/csv;charset=utf-8;' }), `Cluster_Sensitivity_Configs_${getTimestampStr()}.csv`);
+    }
+
+    function exportSensKeywordsCsv() {
+      if (!SENS.results) return;
+      const { configs, consistency, consCnt } = SENS.results;
+      const rows = computedSnaResults.nodes.slice().sort((a, b) => a.cluster - b.cluster || b.tls - a.tls).map(n => {
+        const v = consistency.get(n.id);
+        const row = {
+          Keyword: n.id,
+          Current_Cluster: `C${n.cluster}`,
+          Occurrences: n.occurrences,
+          Cross_Setting_Consistency: v == null ? '' : +v.toFixed(4),
+          Settings_Compared: consCnt.get(n.id),
+          Role: v == null ? '' : v >= SENS_CORE ? 'core' : 'boundary'
+        };
+        configs.forEach(c => {
+          const key = `${c.weightMode === 'assoc' ? 'AS' : 'RAW'}_g${c.gamma}_min${c.minOcc}`;
+          row[key] = c.labels.get(n.id) || '(not in network)';
+        });
+        return row;
+      });
+      triggerDownload(new Blob(['﻿' + Papa.unparse(rows)], { type: 'text/csv;charset=utf-8;' }), `Cluster_Sensitivity_Keywords_${getTimestampStr()}.csv`);
+    }
+
+    document.getElementById('btnOpenSens').addEventListener('click', openSensModal);
+    document.getElementById('sensClose').addEventListener('click', closeSensModal);
+    document.getElementById('sensModal').addEventListener('click', e => { if (e.target.id === 'sensModal') closeSensModal(); });
+    document.getElementById('sensRun').addEventListener('click', runSensitivity);
+    document.getElementById('sensCsvConfigs').addEventListener('click', exportSensConfigsCsv);
+    document.getElementById('sensCsvKeywords').addEventListener('click', exportSensKeywordsCsv);
   </script>
 </body>
 </html>
