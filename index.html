@@ -283,8 +283,8 @@
             <table class="w-full text-left border-collapse">
               <thead class="bg-slate-50 text-slate-600">
                 <tr>
-                  <th class="py-2 px-2.5">邊權重</th><th class="py-2 px-2 text-right">γ</th><th class="py-2 px-2 text-right">門檻</th><th class="py-2 px-2 text-right" title="達門檻的候選關鍵字數 → 經節點上限處理後實際入圖的數量">候選 → 入圖</th>
-                  <th class="py-2 px-2 text-right">節點數</th><th class="py-2 px-2 text-right" title="入圖關鍵字的出現篇數總和，佔全部關鍵字（整併與剔除後）出現篇數總和的比例">涵蓋率</th><th class="py-2 px-2 text-right">聚落數</th><th class="py-2 px-2 text-right">Q</th>
+                  <th class="py-2 px-2.5">邊權重</th><th class="py-2 px-2 text-right">γ</th><th class="py-2 px-2 text-right" title="要求的入圖門檻，敏感度分析中嚴格執行、不自動放寬">門檻</th><th class="py-2 px-2 text-right" title="達門檻的候選關鍵字數 → 經節點上限處理後實際入圖的數量">候選 → 入圖</th>
+                  <th class="py-2 px-2 text-right">節點數</th><th class="py-2 px-2 text-right" title="入圖關鍵字的出現篇數總和，佔全部關鍵字（整併與剔除後）出現篇數總和的比例">涵蓋率</th><th class="py-2 px-2 text-right">聚落數</th><th class="py-2 px-2 text-right" title="該列 γ 下的廣義模組度，為選擇分群的依據；不同 γ、門檻或邊權重之間不可直接比較">Qγ</th><th class="py-2 px-2 text-right" title="標準模組度（γ = 1），僅供描述">Q1</th>
                   <th class="py-2 px-2 text-right" title="同一設定下 100 次隨機順序重複的平均 ARI">穩定性 ARI</th>
                   <th class="py-2 px-2 text-right" title="與目前分群的調整蘭德指數，以兩者共同的關鍵字計算">與目前分群的 ARI</th>
                   <th class="py-2 px-2.5 text-right">共同節點</th>
@@ -670,8 +670,8 @@
     /********************************************************************
      * 版本資訊：每次發布新版本時，只需修改這兩個常數（頁尾會自動更新）
      ********************************************************************/
-    const APP_VERSION = '5.7';
-    const APP_UPDATED = '2026-10-24';
+    const APP_VERSION = '5.8';
+    const APP_UPDATED = '2026-10-31';
     document.getElementById('appVersion').textContent = APP_VERSION;
     document.getElementById('appUpdated').textContent = APP_UPDATED;
 
@@ -706,7 +706,7 @@
       louvain: {
         title: '5. Louvain / 模組度自動分群 (Modularity Clustering)',
         formula: 'Q = \\frac{1}{2m} \\sum_{i,j} \\left[ A_{ij} - \\gamma \\frac{k_i k_j}{2m} \\right] \\delta(c_i, c_j)',
-        desc: '透過最大化網路的「模組度（Modularity Q 值）」，在無需事先指定分類標準的情況下，自動識別內部連線緊密、外部連線稀疏的知識聚落（Clusters）。本工具實作完整的兩階段 Louvain 演算法（Blondel et al., 2008），反覆進行「節點局部移動」與「社群聚合」直到模組度不再提升。<br><br>【可調參數】：(1) 分群邊權重：預設先以 association strength 正規化共現次數，扣除高頻詞的規模效應（見「Association strength」條目）；(2) 解析度 γ：預設為 1，調高會分出較多、較小的聚落，調低則聚落較少、較大。模組度存在「解析度限制」，規模過小的主題可能被併入大聚落而無法辨識（Fortunato & Barthélemy, 2007），γ 可用來檢視不同尺度下的主題結構。報表中的 Q 值一律以 γ = 1 的標準公式、依分群所用的權重計算。<br><br>【方法學提醒】：VOSviewer 使用其自身的分群技術（Waltman, van Eck, & Noyons, 2010），即使正規化方式相同，分群結果仍不必然一致。若論文中的網路圖來自 VOSviewer，聚落命名與詮釋應以 VOSviewer 的分群為準；引用本工具的分群時，請在方法段落寫明演算法、邊權重、γ 值、Q 值與穩定性檢驗結果。',
+        desc: '透過最大化網路的「模組度（Modularity Q 值）」，在無需事先指定分類標準的情況下，自動識別內部連線緊密、外部連線稀疏的知識聚落（Clusters）。本工具實作完整的兩階段 Louvain 演算法（Blondel et al., 2008），反覆進行「節點局部移動」與「社群聚合」直到模組度不再提升。<br><br>【可調參數】：(1) 分群邊權重：預設先以 association strength 正規化共現次數，扣除高頻詞的規模效應（見「Association strength」條目）；(2) 解析度 γ：預設為 1，調高會分出較多、較小的聚落，調低則聚落較少、較大。模組度存在「解析度限制」，規模過小的主題可能被併入大聚落而無法辨識（Fortunato & Barthélemy, 2007），γ 可用來檢視不同尺度下的主題結構。分群搜尋與最終選解都以指定 γ 的廣義模組度 Qγ 為目標函數；γ ≠ 1 時，報表另列 γ = 1 的標準模組度 Q1 作為描述性指標，但不用來選擇分群。不同 γ、門檻或邊權重下的 Qγ 建立在不同的目標函數或網路上，不可直接比較大小來決定「最佳設定」。網路沒有任何連線時，模組度的分母為 0，報表標示為「不適用」。<br><br>【方法學提醒】：VOSviewer 使用其自身的分群技術（Waltman, van Eck, & Noyons, 2010），即使正規化方式相同，分群結果仍不必然一致。若論文中的網路圖來自 VOSviewer，聚落命名與詮釋應以 VOSviewer 的分群為準；引用本工具的分群時，請在方法段落寫明演算法、邊權重、γ 值、Q 值與穩定性檢驗結果。',
         interpretation: '【論文詮釋建議】：每一個分群顏色代表一個主題聚落（Thematic Cluster）。研究者可依各群內 TLS 最高的前 3~5 個關鍵字為聚落命名，並同時檢查「分群穩定度」：穩定度偏低的關鍵字位於聚落邊界，詮釋時不宜作為該聚落的代表詞。'
       },
       assoc: {
@@ -718,13 +718,13 @@
       stability: {
         title: '8. 分群穩定性檢驗 (Clustering Stability)',
         formula: 'S_i = \\frac{1}{R} \\sum_{r=1}^{R} \\frac{|C_i \\cap C_i^{(r)}|}{|C_i \\cup C_i^{(r)}|}',
-        desc: 'Louvain 的結果會受到節點處理順序影響，模組度也常存在多個 Q 值相近、但分群不同的解（Good, de Montjoye, & Clauset, 2010）。本工具以固定亂數種子將節點順序隨機打亂、重複執行 100 次，並以「固定順序 + 100 次重複」中模組度最高的分群作為報告結果。<br><br>【節點穩定度 S<sub>i</sub>】：節點 i 在報告分群中的所屬聚落 C<sub>i</sub>，與第 r 次重複中所屬聚落 C<sub>i</sub><sup>(r)</sup> 的 Jaccard 相似度平均值，介於 0 到 1；1 表示每次重複中，該節點都與完全相同的一組關鍵字分在一起。<br>【整體指標】：與報告分群完全相同的重複比例、調整蘭德指數（Adjusted Rand Index, ARI；Hubert & Arabie, 1985）平均值，以及重複結果的 Q 值範圍。ARI 為 1 表示分群完全一致，接近 0 表示一致程度與隨機分群相當。',
+        desc: 'Louvain 的結果會受到節點處理順序影響，模組度也常存在多個 Q 值相近、但分群不同的解（Good, de Montjoye, & Clauset, 2010）。本工具以固定亂數種子將節點順序隨機打亂、重複執行 100 次，並以「固定順序 + 100 次重複」中模組度最高的分群作為報告結果。<br><br>【節點穩定度 S<sub>i</sub>】：節點 i 在報告分群中的所屬聚落 C<sub>i</sub>，與第 r 次重複中所屬聚落 C<sub>i</sub><sup>(r)</sup> 的 Jaccard 相似度平均值，介於 0 到 1；1 表示每次重複中，該節點都與完全相同的一組關鍵字分在一起。<br>【整體指標】：與報告分群完全相同的重複比例、調整蘭德指數（Adjusted Rand Index, ARI；Hubert & Arabie, 1985）平均值，以及重複結果的 Qγ 範圍。ARI 為 1 表示分群完全一致，接近 0 表示一致程度與隨機分群相當。',
         interpretation: '【論文詮釋建議】：可在方法或結果段落報告「100 次隨機順序重複中，x% 與報告分群相同，平均 ARI = y」。表格中以橘色（S < 0.70）與紅色（S < 0.50）標示邊界不穩定的關鍵字；0.70 是本工具的提示門檻，屬於經驗值而非統計檢定標準。由於使用固定亂數種子，同一份資料與設定每次都會得到相同的結果，確保可重現性。'
       },
       sensitivity: {
         title: '9. 分群敏感度分析 (Sensitivity Analysis)',
         formula: '\\bar{J}_i = \\frac{1}{K} \\sum_{k=1}^{K} \\frac{|C_i \\cap C_i^{(k)}|}{|C_i \\cup C_i^{(k)}|}',
-        desc: '穩定性檢驗回答「同一組設定下，結果是否可重現」；敏感度分析回答「改變分析設定時，主要聚落是否依然存在」。本工具以目前畫面上的分群為比較基準，依使用者指定的解析度 γ、入圖門檻與邊權重組合逐一重新分群（每組皆含 100 次穩定性檢驗），並報告：(1) 每組設定的節點數、涵蓋率（入圖關鍵字出現篇數總和佔全部關鍵字出現篇數總和的比例）、聚落數、Q 值與穩定性；(2) 與目前分群的調整蘭德指數（ARI），以兩組設定共同包含的關鍵字計算；(3) 每個關鍵字的跨設定一致度 J<sub>i</sub>：關鍵字在目前分群中的所屬聚落 C<sub>i</sub>，與第 k 組設定中所屬聚落 C<sub>i</sub><sup>(k)</sup>（限共同關鍵字）的 Jaccard 相似度，在 K 組設定（不含目前設定本身）間取平均。',
+        desc: '穩定性檢驗回答「同一組設定下，結果是否可重現」；敏感度分析回答「改變分析設定時，主要聚落是否依然存在」。本工具以目前畫面上的分群為比較基準，依使用者指定的解析度 γ、入圖門檻與邊權重組合逐一重新分群（每組皆含 100 次穩定性檢驗），並報告：(1) 每組設定的節點數、涵蓋率（入圖關鍵字出現篇數總和佔全部關鍵字出現篇數總和的比例）、聚落數、Qγ 與 Q1、穩定性；入圖門檻一律嚴格執行、不自動放寬，節點少於 3 個或沒有連線的設定不進行分群；(2) 與目前分群的調整蘭德指數（ARI），以兩組設定共同包含的關鍵字計算；(3) 每個關鍵字的跨設定一致度 J<sub>i</sub>：關鍵字在目前分群中的所屬聚落 C<sub>i</sub>，與第 k 組設定中所屬聚落 C<sub>i</sub><sup>(k)</sup>（限共同關鍵字）的 Jaccard 相似度，在 K 組設定（不含目前設定本身）間取平均。',
         interpretation: '【論文詮釋建議】：可報告「在 γ = 0.6–1.6 的範圍內，各設定與報告分群的 ARI 中位數為 x，y% 的關鍵字跨設定一致度 ≥ 0.70」。聚落命名宜以核心詞（一致度 ≥ 0.70）為主；邊界詞歸屬會隨設定改變，詮釋時應說明其位於主題之間。γ 範圍越寬，ARI 自然越低：聚落數改變時，即使主題結構相同，ARI 也會下降，因此請同時參考聚落數與核心詞的變化。0.70 為本工具的提示門檻，屬於經驗值。'
       },
       force: {
@@ -1340,15 +1340,36 @@
     }
     function getTieMode() { return document.getElementById('snaTieModeSelect').value; }
 
-    function selectSnaEntries(mergedFreqMap, minOcc, cap = getNodeCap(), tieMode = getTieMode()) {
+    /**
+     * 回傳的 info 欄位（各門檻概念分開記錄，避免混用）：
+     *   requestedMin    使用者要求的入圖門檻
+     *   appliedMin      實際用來篩選的門檻（自動放寬時為 1，否則等於 requestedMin）
+     *   relaxed / relaxationReason  是否自動放寬及原因
+     *   strictTooFew    嚴格模式下節點少於 3 個（未放寬）
+     *   truncated / tieValue / tieCount / tieMode  節點上限截斷與邊界同分處理
+     *   equivalentMin   能得到相同入圖節點集合的最小門檻（未截斷時等於 appliedMin）
+     *   minObserved     入圖關鍵字中最低的實際出現篇數（描述值，不等於篩選門檻）
+     * allowRelaxation = false（嚴格模式）供敏感度分析使用：節點不足時不放寬，如實回報。
+     */
+    function selectSnaEntries(mergedFreqMap, minOcc, cap = getNodeCap(), tieMode = getTieMode(), allowRelaxation = true) {
       const sortFn = (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]);
       let entries = Array.from(mergedFreqMap.entries()).filter(([_, count]) => count >= minOcc).sort(sortFn);
-      let relaxed = false;
+      const info = {
+        requestedMin: minOcc, appliedMin: minOcc, relaxed: false, relaxationReason: '', strictTooFew: false,
+        cap, tieMode, truncated: false, tieValue: null, tieCount: 0
+      };
       if (entries.length < 3 && minOcc > 1) {
-        entries = Array.from(mergedFreqMap.entries()).filter(([_, count]) => count >= 1).sort(sortFn);
-        relaxed = true;
+        if (allowRelaxation) {
+          info.relaxationReason = `要求門檻 ≥ ${minOcc} 篇時只有 ${entries.length} 個關鍵字（少於 3 個）`;
+          entries = Array.from(mergedFreqMap.entries()).filter(([_, count]) => count >= 1).sort(sortFn);
+          info.relaxed = true;
+          info.appliedMin = 1;
+        } else {
+          info.strictTooFew = true;
+        }
       }
-      const info = { minOcc, relaxed, eligible: entries.length, cap, truncated: false, tieValue: null, tieCount: 0, tieMode };
+      info.eligible = entries.length;
+      info.equivalentMin = info.appliedMin;
       if (entries.length > cap) {
         info.truncated = true;
         const boundary = entries[cap - 1][1];
@@ -1359,9 +1380,14 @@
         } else {
           entries = entries.slice(0, cap);
         }
+        // 被排除的候選中最高的出現篇數 + 1，即為能重現此節點集合的最小門檻
+        const kept = new Set(entries.map(e => e[0]));
+        let maxExcluded = 0;
+        for (const [t, c] of mergedFreqMap) if (c >= info.appliedMin && !kept.has(t) && c > maxExcluded) maxExcluded = c;
+        info.equivalentMin = maxExcluded + 1;
       }
       info.selected = entries.length;
-      info.effectiveMin = entries.length ? entries[entries.length - 1][1] : null;
+      info.minObserved = entries.length ? entries[entries.length - 1][1] : null;
       return { entries, info };
     }
 
@@ -1369,16 +1395,16 @@
       const el = document.getElementById('snaCapNote');
       let msg = '';
       if (info.relaxed) {
-        msg = `入圖門檻 ≥ ${info.minOcc} 篇時節點少於 3 個，已自動放寬為 ≥ 1 篇。`;
+        msg = `${info.relaxationReason}，主分析已自動放寬為 ≥ 1 篇。敏感度分析不會自動放寬。`;
       }
       if (info.truncated) {
-        msg += `出現篇數 ≥ ${info.relaxed ? 1 : info.minOcc} 篇的關鍵字有 ${info.eligible} 個，超過節點上限 ${info.cap} 個。`;
+        msg += `出現篇數 ≥ ${info.appliedMin} 篇的關鍵字有 ${info.eligible} 個，超過節點上限 ${info.cap} 個。`;
         if (info.tieValue != null) {
           msg += info.tieMode === 'include'
             ? `上限落在出現 ${info.tieValue} 篇的 ${info.tieCount} 個同分關鍵字之間，已<b>整批納入</b>，實際入圖 <b>${info.selected}</b> 個（超過上限）。`
-            : `上限落在出現 ${info.tieValue} 篇的 ${info.tieCount} 個同分關鍵字之間，已<b>整批排除</b>，實際入圖 <b>${info.selected}</b> 個，相當於門檻 ≥ ${info.effectiveMin} 篇。`;
+            : `上限落在出現 ${info.tieValue} 篇的 ${info.tieCount} 個同分關鍵字之間，已<b>整批排除</b>，實際入圖 <b>${info.selected}</b> 個，相當於門檻 ≥ ${info.equivalentMin} 篇。`;
         } else {
-          msg += `已取出現篇數最高的 ${info.selected} 個，實際最低出現篇數為 ${info.effectiveMin} 篇。`;
+          msg += `已取出現篇數最高的 ${info.selected} 個，相當於門檻 ≥ ${info.equivalentMin} 篇。`;
         }
         msg += ' 論文中請報告實際的入圖條件。';
       }
@@ -1521,18 +1547,17 @@
         weightMode: document.getElementById('clusterWeightSelect').value,
         gamma: isFinite(gammaInput) && gammaInput > 0 ? gammaInput : 1
       });
-      const modularityQ = clusterInfo.Q;
       const coverage = computeCoverage(mergedFreqMap, sortedEntries);
-      renderStabilityNote(clusterInfo, N, coverage);
+      renderStabilityNote(clusterInfo, N, coverage, selectionInfo);
 
       const density = N > 1 ? ((2 * links.length) / (N * (N - 1))).toFixed(3) : 0;
       const clusterCount = new Set(nodes.map(n => n.cluster)).size;
       document.getElementById('snaMacroStats').textContent =
-        `入圖節點: ${N} | 共現連線: ${links.length} | 網路密度: ${density} | 聚落數: ${clusterCount} | 模組度 Q: ${modularityQ.toFixed(3)}`;
+        `入圖節點: ${N} | 共現連線: ${links.length} | 網路密度: ${density} | 聚落數: ${clusterCount} | ${qSummaryText(clusterInfo, 'zh', ' | ')}`;
 
       // 複製一份依 TLS 排序供表格呈現
       const tableNodes = [...nodes].sort((a, b) => (b.tls - a.tls) || (b.occurrences - a.occurrences));
-      computedSnaResults = { nodes, tableNodes, links, matrix, nodeDocs, nodeMap, macro: { N, L: links.length, density: +density, clusterCount, modularityQ, clusterInfo, minOcc, selectionInfo, coverage } };
+      computedSnaResults = { nodes, tableNodes, links, matrix, nodeDocs, nodeMap, macro: { N, L: links.length, density: +density, clusterCount, Qgamma: clusterInfo.Qgamma, Q1: clusterInfo.Q1, clusterInfo, minOcc, selectionInfo, coverage } };
 
       renderSnaMetricsTable(tableNodes);
       renderD3Network(nodes, links);
@@ -1634,12 +1659,16 @@
       return membership;
     }
 
-    // 標準模組度 (γ = 1)，以分群所用的權重矩陣計算
-    function modularityOf(W, N, membership) {
+    /**
+     * 廣義模組度 Qγ（以分群所用的權重矩陣 W 計算）
+     *   Qγ = Σ_C [ inW_C / 2m − γ · (totW_C / 2m)² ]
+     * γ = 1 時即為標準模組度 Q1。總邊權為 0 時公式分母為 0，回傳 null（不適用），不以 0 代替。
+     */
+    function modularityOf(W, N, membership, gamma = 1) {
       let total2m = 0;
       const k = new Array(N).fill(0);
       for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { k[i] += W[i][j]; total2m += W[i][j]; }
-      if (total2m === 0) return 0;
+      if (total2m === 0) return null;
       const inW = new Map(), totW = new Map();
       for (let i = 0; i < N; i++) {
         const c = membership[i];
@@ -1647,7 +1676,7 @@
         for (let j = 0; j < N; j++) if (membership[j] === c) inW.set(c, (inW.get(c) || 0) + W[i][j]);
       }
       let Q = 0;
-      for (const c of totW.keys()) Q += (inW.get(c) || 0) / total2m - Math.pow(totW.get(c) / total2m, 2);
+      for (const c of totW.keys()) Q += (inW.get(c) || 0) / total2m - gamma * Math.pow(totW.get(c) / total2m, 2);
       return Q;
     }
 
@@ -1677,30 +1706,41 @@
 
     /**
      * 執行分群與穩定性檢驗，結果寫入 nodes[i].cluster 與 nodes[i].stability。
-     * 回傳 { Q, weightMode, gamma, stability: { runs, meanARI, identicalPct, qMin, qMax, unstable } }
+     * 候選解（固定順序 1 次 + 隨機順序 STABILITY_RUNS 次）一律以指定 γ 的 Qγ 評分與選擇，
+     * 與 Louvain 搜尋所用的目標函數一致；標準模組度 Q1 另行計算，僅作描述性指標。
+     * 同分（差距 ≤ 1e-12）時保留較早產生的候選，確保結果可重現。
+     * 回傳 { computable, Qgamma, Q1, weightMode, gamma, stability: { runs, meanARI, identicalPct, qMin, qMax, unstable } }
+     *   stability.qMin／qMax 為隨機重複結果的 Qγ 範圍。網路無任何連線時 computable = false，Q 為 null。
      */
     function assignLouvainClusters(nodes, matrix, N, opts = {}) {
       const weightMode = opts.weightMode || 'assoc';
       const gamma = opts.gamma > 0 ? opts.gamma : 1;
-      const info = { Q: 0, weightMode, gamma, stability: null };
+      const info = { computable: false, Qgamma: null, Q1: null, weightMode, gamma, stability: null };
       if (N === 0) return info;
       const W = buildClusteringWeights(matrix, N, weightMode);
+      let totalW = 0;
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) totalW += W[i][j];
+      if (totalW === 0) {
+        // 無連線：每個節點各自一群，不計算 Q 與穩定性
+        nodes.forEach((n, i) => { n.cluster = i + 1; n.stability = null; });
+        return info;
+      }
+      info.computable = true;
 
-      const candidates = [];
-      const det = louvainPartition(W, N, gamma, null);
-      candidates.push({ m: det, Q: modularityOf(W, N, det) });
+      const score = m => ({ m, objectiveQ: modularityOf(W, N, m, gamma) });
+      const candidates = [score(louvainPartition(W, N, gamma, null))];
       const rng = mulberry32(STABILITY_SEED);
       const runs = [];
       for (let r = 0; r < STABILITY_RUNS; r++) {
-        const m = louvainPartition(W, N, gamma, rng);
-        const run = { m, Q: modularityOf(W, N, m) };
+        const run = score(louvainPartition(W, N, gamma, rng));
         runs.push(run);
         candidates.push(run);
       }
       let best = candidates[0];
-      for (const c of candidates) if (c.Q > best.Q + 1e-12) best = c;
+      for (const c of candidates) if (c.objectiveQ > best.objectiveQ + 1e-12) best = c;
       const ref = best.m;
-      info.Q = best.Q;
+      info.Qgamma = best.objectiveQ;
+      info.Q1 = modularityOf(W, N, ref, 1);
 
       // 節點穩定度：節點在參考分群中的所屬聚落，與每次重複中所屬聚落的 Jaccard 相似度平均
       const refSet = i => { const s = new Set(); for (let j = 0; j < N; j++) if (ref[j] === ref[i]) s.add(j); return s; };
@@ -1721,7 +1761,7 @@
       for (const run of runs) {
         ariSum += adjustedRandIndex(ref, run.m);
         if (partitionKey(run.m) === refKey) same++;
-        qMin = Math.min(qMin, run.Q); qMax = Math.max(qMax, run.Q);
+        qMin = Math.min(qMin, run.objectiveQ); qMax = Math.max(qMax, run.objectiveQ);
       }
 
       // 重新編號 Cluster 為 1, 2, 3...（依聚落大小，同大小依總出現篇數）
@@ -1762,18 +1802,49 @@
         : `Louvain clustering; edge weights: ${w}; resolution γ = ${info.gamma}`;
     }
 
-    function renderStabilityNote(info, N, coverage) {
+    const fmtQ = (v, d = 3) => (v == null ? '不適用' : v.toFixed(d));
+    const isGammaOne = g => Math.abs(g - 1) < 1e-12;
+
+    // 模組度摘要文字：γ = 1 時只顯示 Q；γ ≠ 1 時分別顯示選解依據 Qγ 與標準模組度 Q1
+    function qSummaryText(info, lang = 'zh', sep = '｜') {
+      const zh = lang === 'zh';
+      if (!info.computable) return zh ? '模組度：不適用（網路無連線）' : 'Modularity: not applicable (no links)';
+      if (isGammaOne(info.gamma)) return zh ? `模組度 Q = ${fmtQ(info.Qgamma)}` : `Modularity Q = ${fmtQ(info.Qgamma)}`;
+      return zh
+        ? `模組度 Qγ（γ = ${info.gamma}）= ${fmtQ(info.Qgamma)}${sep}標準模組度 Q1 = ${fmtQ(info.Q1)}`
+        : `Modularity Qγ (γ = ${info.gamma}) = ${fmtQ(info.Qgamma)}${sep === ' | ' ? sep : '; '}standard Q1 = ${fmtQ(info.Q1)}`;
+    }
+
+    function inclusionText(sel, lang = 'zh') {
+      const zh = lang === 'zh';
+      let t = zh ? `出現篇數 ≥ ${sel.equivalentMin}` : `occurrences ≥ ${sel.equivalentMin}`;
+      const notes = [];
+      if (sel.relaxed) notes.push(zh ? `要求 ≥ ${sel.requestedMin}，因節點不足已自動放寬` : `relaxed from requested ≥ ${sel.requestedMin}`);
+      if (sel.truncated) notes.push(zh ? `節點上限 ${sel.cap}、邊界同分${sel.tieMode === 'include' ? '整批納入' : '整批排除'}` : `node cap ${sel.cap}, ties ${sel.tieMode === 'include' ? 'included' : 'excluded'}`);
+      if (notes.length) t += zh ? `（${notes.join('；')}）` : ` (${notes.join('; ')})`;
+      return t;
+    }
+
+    function renderStabilityNote(info, N, coverage, sel) {
       const el = document.getElementById('snaStabilityNote');
       const st = info.stability;
-      if (!st || N < 3) { el.classList.add('hidden'); return; }
+      if (!st || N < 3) {
+        if (N > 0 && !info.computable) {
+          el.classList.remove('hidden');
+          el.innerHTML = `<b>入圖範圍：</b>${N} 個關鍵字；入圖條件：${escapeHtml(inclusionText(sel))}<br><b>分群：</b>網路中沒有任何共現連線，無法計算模組度與分群。`;
+        } else el.classList.add('hidden');
+        return;
+      }
       el.classList.remove('hidden');
+      const gOne = isGammaOne(info.gamma);
+      const qName = gOne ? 'Q' : 'Qγ';
       const qRange = `${st.qMin.toFixed(3)}–${st.qMax.toFixed(3)}`;
       el.innerHTML = `
-        <b>入圖範圍：</b>${N} 個關鍵字，涵蓋全部關鍵字出現次數的 <b>${(coverage * 100).toFixed(1)}%</b><br>
-        <b>分群方法：</b>${escapeHtml(clusterMethodText(info))}（報告分群取 ${st.runs + 1} 次執行中模組度最高者，Q = ${info.Q.toFixed(3)}）<br>
+        <b>入圖範圍：</b>${N} 個關鍵字，涵蓋全部關鍵字出現次數的 <b>${(coverage * 100).toFixed(1)}%</b>；入圖條件：${escapeHtml(inclusionText(sel))}<br>
+        <b>分群方法：</b>${escapeHtml(clusterMethodText(info))}（報告分群取 ${st.runs + 1} 次執行中 ${qName} 最高者，${qName} = ${fmtQ(info.Qgamma)}${gOne ? '' : `；標準模組度 Q1 = ${fmtQ(info.Q1)}，僅供描述`}）<br>
         <b><span class="term-help" onclick="openTermModal('stability')">穩定性檢驗 [?]</span>：</b>
         ${st.runs} 次隨機順序重複中，<b>${st.identicalPct.toFixed(0)}%</b> 與報告分群完全相同；
-        平均 ARI = <b>${st.meanARI.toFixed(3)}</b>；Q 範圍 ${qRange}；
+        平均 ARI = <b>${st.meanARI.toFixed(3)}</b>；${qName} 範圍 ${qRange}；
         穩定度 &lt; ${STABILITY_WARN.toFixed(2)} 的節點 <b class="${st.unstable ? 'text-amber-700' : ''}">${st.unstable}</b> 個（表格中以橘／紅色標示）。`;
     }
 
@@ -2612,12 +2683,13 @@
 
       if (o.showStats && computedSnaResults.macro) {
         const m = computedSnaResults.macro;
-        const minOcc = Math.min(...FS.nodes.map(n => n.occurrences));
         y += lh;
         const s = zh
-          ? `節點 ${m.N}｜連線 ${m.L}｜網路密度 ${m.density.toFixed(3)}｜聚落 ${m.clusterCount}｜模組度 Q = ${m.modularityQ.toFixed(3)}｜入圖門檻：出現篇數 ≥ ${minOcc}${m.coverage != null ? `｜涵蓋率 ${(m.coverage * 100).toFixed(1)}%` : ''}`
-          : `Nodes = ${m.N}; Links = ${m.L}; Density = ${m.density.toFixed(3)}; Clusters = ${m.clusterCount}; Modularity Q = ${m.modularityQ.toFixed(3)}; Min. occurrences = ${minOcc}${m.coverage != null ? `; Coverage = ${(m.coverage * 100).toFixed(1)}%` : ''}`;
+          ? `節點 ${m.N}｜連線 ${m.L}｜網路密度 ${m.density.toFixed(3)}｜聚落 ${m.clusterCount}｜${qSummaryText(m.clusterInfo, 'zh')}${m.coverage != null ? `｜涵蓋率 ${(m.coverage * 100).toFixed(1)}%` : ''}`
+          : `Nodes = ${m.N}; Links = ${m.L}; Density = ${m.density.toFixed(3)}; Clusters = ${m.clusterCount}; ${qSummaryText(m.clusterInfo, 'en')}${m.coverage != null ? `; Coverage = ${(m.coverage * 100).toFixed(1)}%` : ''}`;
         w = Math.max(w, text(0, y, s, { fill: th.muted }));
+        y += lh;
+        w = Math.max(w, text(0, y, zh ? `入圖條件：${inclusionText(m.selectionInfo, 'zh')}` : `Inclusion: ${inclusionText(m.selectionInfo, 'en')}`, { fill: th.muted }));
         const ci = m.clusterInfo;
         if (ci) {
           y += lh;
@@ -2982,11 +3054,13 @@
      ********************************************************************/
     const SENS = { results: null, running: false };
     const SENS_CORE = 0.7;
+    const SENS_MIN_NODES = 3; // 少於此節點數的網路不進行分群，也不納入 ARI 與一致度
 
     function buildCoocNetwork(minOcc) {
       const mergedFreqMap = computeMergedFreqMap();
       const mode = document.getElementById('selectKwMode').value;
-      const { entries, info: selection } = selectSnaEntries(mergedFreqMap, minOcc);
+      // 敏感度分析採嚴格門檻：節點不足時不自動放寬，如實回報
+      const { entries, info: selection } = selectSnaEntries(mergedFreqMap, minOcc, getNodeCap(), getTieMode(), false);
       const N = entries.length;
       const nodeMap = new Map(entries.map(([t], i) => [t, i]));
       const matrix = Array.from({ length: N }, () => new Array(N).fill(0));
@@ -3015,8 +3089,10 @@
       if (!computedSnaResults) return;
       const m = computedSnaResults.macro;
       document.getElementById('sensMinOccs').value = m.minOcc;
+      const relaxNote = m.selectionInfo.relaxed
+        ? `<br><span class="text-amber-800">⚠️ 目前分群的入圖門檻已由 ≥ ${m.minOcc} 篇自動放寬為 ≥ 1 篇；敏感度分析採嚴格門檻、不自動放寬，因此門檻 ≥ ${m.minOcc} 的比較結果不等於目前分群。</span>` : '';
       document.getElementById('sensRefInfo').innerHTML =
-        `<b>比較基準（目前分群）：</b>邊權重 ${weightLabel(m.clusterInfo.weightMode)}、γ = ${m.clusterInfo.gamma}、入圖門檻 ≥ ${m.minOcc} 篇、節點上限 ${m.selectionInfo.cap} 個（邊界同分${m.selectionInfo.tieMode === 'include' ? '整批納入' : '整批排除'}）、實際 ${m.N} 個節點、${m.clusterCount} 個聚落。改變門檻時，節點上限與同分處理方式沿用此設定。若要改變基準，請先在步驟三調整設定，再開啟本視窗。`;
+        `<b>比較基準（目前分群）：</b>邊權重 ${weightLabel(m.clusterInfo.weightMode)}、γ = ${m.clusterInfo.gamma}、入圖門檻 ≥ ${m.minOcc} 篇、節點上限 ${m.selectionInfo.cap} 個（邊界同分${m.selectionInfo.tieMode === 'include' ? '整批納入' : '整批排除'}）、實際 ${m.N} 個節點、${m.clusterCount} 個聚落。改變門檻時，節點上限與同分處理方式沿用此設定；門檻一律嚴格執行，節點少於 ${SENS_MIN_NODES} 個或無連線的設定不進行分群。若要改變基準，請先在步驟三調整設定，再開啟本視窗。${relaxNote}`;
       if (SENS.results && SENS.results.refToken !== computedSnaResults) {
         SENS.results = null;
         document.getElementById('sensResults').classList.add('hidden');
@@ -3068,19 +3144,30 @@
         await new Promise(res => setTimeout(res, 0));
         if (!nets.has(c.minOcc)) nets.set(c.minOcc, buildCoocNetwork(c.minOcc));
         const net = nets.get(c.minOcc);
-        const tmpNodes = net.ids.map((id, i) => ({ id, occurrences: net.occ[i] }));
-        const info = assignLouvainClusters(tmpNodes, net.matrix, net.N, { weightMode: c.weightMode, gamma: c.gamma });
-        const cfgById = new Map(tmpNodes.map(n => [n.id, n.cluster]));
-        const common = refIds.filter(id => cfgById.has(id));
         c.N = net.N;
-        c.clusterCount = new Set(tmpNodes.map(n => n.cluster)).size;
         c.coverage = net.coverage;
         c.sel = net.selection;
-        c.Q = info.Q;
+        c.inNetwork = new Set(net.ids);
+        c.labels = new Map();
+        c.clusterCount = null; c.Qgamma = null; c.Q1 = null; c.stabARI = null; c.ari = null;
+        c.common = refIds.filter(id => c.inNetwork.has(id)).length;
+        // 目前設定：邊權重、γ 相同且入圖節點集合完全相同（主分析若曾放寬門檻，就不會被誤認為同一設定）
+        c.isRef = c.weightMode === m.clusterInfo.weightMode && Math.abs(c.gamma - m.clusterInfo.gamma) < 1e-9 &&
+          net.N === refIds.length && refIds.every(id => c.inNetwork.has(id));
+        c.computable = false;
+        c.reason = net.N === 0 ? '沒有符合門檻的關鍵字' : net.N < SENS_MIN_NODES ? `節點少於 ${SENS_MIN_NODES} 個` : '';
+        if (c.reason) continue;
+        const tmpNodes = net.ids.map((id, i) => ({ id, occurrences: net.occ[i] }));
+        const info = assignLouvainClusters(tmpNodes, net.matrix, net.N, { weightMode: c.weightMode, gamma: c.gamma });
+        if (!info.computable) { c.reason = '網路無連線'; continue; }
+        c.computable = true;
+        const cfgById = new Map(tmpNodes.map(n => [n.id, n.cluster]));
+        const common = refIds.filter(id => cfgById.has(id));
+        c.clusterCount = new Set(tmpNodes.map(n => n.cluster)).size;
+        c.Qgamma = info.Qgamma;
+        c.Q1 = info.Q1;
         c.stabARI = info.stability ? info.stability.meanARI : null;
-        c.common = common.length;
         c.ari = common.length >= 2 ? adjustedRandIndex(common.map(id => refById.get(id)), common.map(id => cfgById.get(id))) : null;
-        c.isRef = c.weightMode === m.clusterInfo.weightMode && Math.abs(c.gamma - m.clusterInfo.gamma) < 1e-9 && c.minOcc === m.minOcc;
         const label = alignClusters(refById, cfgById, common);
         c.labels = new Map(common.map(id => [id, label(cfgById.get(id))]));
         if (!c.isRef) {
@@ -3106,31 +3193,37 @@
     function renderSensResults() {
       const { configs, consistency, consCnt, refById, refIds } = SENS.results;
       const r = computedSnaResults;
-      const others = configs.filter(c => !c.isRef && c.ari != null);
+      const done = configs.filter(c => c.computable);
+      const skipped = configs.filter(c => !c.computable);
+      const others = done.filter(c => !c.isRef && c.ari != null);
       const aris = others.map(c => c.ari).sort((a, b) => a - b);
-      const median = aris.length ? (aris.length % 2 ? aris[(aris.length - 1) / 2] : (aris[aris.length / 2 - 1] + aris[aris.length / 2]) / 2) : null;
-      const kc = configs.map(c => c.clusterCount);
+      const med = arr => { const x = arr.slice().sort((p, q) => p - q); const n = x.length; return n % 2 ? x[(n - 1) / 2] : (x[n / 2 - 1] + x[n / 2]) / 2; };
+      const rng = (arr, f = v => v) => { if (!arr.length) return '—'; const lo = Math.min(...arr), hi = Math.max(...arr); return lo === hi ? f(lo) : `${f(lo)}–${f(hi)}`; };
+      const kc = done.map(c => c.clusterCount);
       const vals = refIds.map(id => consistency.get(id)).filter(v => v != null);
       const core = vals.filter(v => v >= SENS_CORE).length;
       const missingRef = configs.some(c => c.isRef) ? '' : '（比較設定中未包含目前設定本身）';
-      // 節點上限截斷提醒：截斷後實際入圖條件相同的門檻，結果必然相同
-      const truncThresholds = Array.from(new Set(configs.filter(c => c.sel.truncated).map(c => c.minOcc))).sort((a, b) => a - b);
-      let capWarning = '';
-      if (truncThresholds.length) {
-        const cap = configs[0].sel.cap;
-        const byEff = new Map();
-        configs.filter(c => c.sel.truncated).forEach(c => {
-          if (!byEff.has(c.sel.effectiveMin)) byEff.set(c.sel.effectiveMin, new Set());
-          byEff.get(c.sel.effectiveMin).add(c.minOcc);
-        });
-        const parts = Array.from(byEff.entries()).sort((a, b) => a[0] - b[0]).map(([eff, set]) => {
-          const ts = Array.from(set).sort((a, b) => a - b).map(t => `≥ ${t}`).join('、');
-          return `${ts}（實際相當於 ≥ ${eff} 篇）`;
-        }).join('；');
-        capWarning = `<div class="mt-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2">⚠️ <b>節點上限限制：</b>門檻 ${parts} 的候選關鍵字超過節點上限 ${cap} 個。截斷後的實際入圖條件已不是設定的門檻（見括號），因此這些設定的結果與括號中的門檻相同，無法用來比較較低的門檻。若要比較較低的門檻，請先在步驟三提高節點上限（目前 ${cap} 個，最多 500 個），再重新執行。</div>`;
-      }
 
-      const med = arr => { const x = arr.slice().sort((p, q) => p - q); const n = x.length; return n % 2 ? x[(n - 1) / 2] : (x[n / 2 - 1] + x[n / 2]) / 2; };
+      // 節點上限截斷提醒：截斷後等效門檻相同的設定，入圖節點集合必然相同
+      let capWarning = '';
+      const truncated = configs.filter(c => c.sel.truncated);
+      if (truncated.length) {
+        const cap = configs[0].sel.cap;
+        const byEq = new Map();
+        truncated.forEach(c => {
+          if (!byEq.has(c.sel.equivalentMin)) byEq.set(c.sel.equivalentMin, new Set());
+          byEq.get(c.sel.equivalentMin).add(c.minOcc);
+        });
+        const parts = Array.from(byEq.entries()).sort((a, b) => a[0] - b[0]).map(([eq, set]) => {
+          const ts = Array.from(set).sort((a, b) => a - b).map(t => `≥ ${t}`).join('、');
+          return `${ts}（相當於 ≥ ${eq} 篇）`;
+        }).join('；');
+        capWarning = `<div class="mt-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2">⚠️ <b>節點上限限制：</b>門檻 ${parts} 的候選關鍵字超過節點上限 ${cap} 個。截斷後的入圖節點集合等同括號中的門檻，這些設定無法用來比較較低的門檻，也不能把結果相同解讀為對門檻穩健。若要比較較低的門檻，請先在步驟三提高節點上限（目前 ${cap} 個，最多 500 個），再重新執行。</div>`;
+      }
+      const skipNote = skipped.length
+        ? `<div class="mt-2 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg px-3 py-2">ⓘ <b>未進行分群的設定：</b>${Array.from(new Set(skipped.map(c => `${weightLabel(c.weightMode)}、門檻 ≥ ${c.minOcc}（${c.N} 個節點，${c.reason}）`))).join('；')}。門檻依要求嚴格執行、未自動放寬；這些設定不納入 ARI、聚落數與一致度的計算。</div>`
+        : '';
+
       // 依「邊權重 × 入圖門檻」分組摘要，避免不同維度的變化混在同一個數字裡
       const groups = new Map();
       configs.forEach(c => {
@@ -3139,41 +3232,50 @@
         groups.get(key).push(c);
       });
       const groupLines = groups.size > 1 ? Array.from(groups.values()).map(g => {
-        const gs = g.map(c => c.gamma), ga = g.filter(c => !c.isRef && c.ari != null).map(c => c.ari);
-        const gk = g.map(c => c.clusterCount);
+        const head = `${weightLabel(g[0].weightMode)}、門檻 ≥ ${g[0].minOcc}`;
+        if (!g[0].computable && !g.some(c => c.computable)) return `<li class="text-slate-500">${head}（${g[0].N} 個節點）：未進行分群（${g[0].reason}）</li>`;
+        const gd = g.filter(c => c.computable);
+        const gs = g.map(c => c.gamma), ga = gd.filter(c => !c.isRef && c.ari != null).map(c => c.ari);
         const hasRef = g.some(c => c.isRef);
-        const rng = (arr, f = v => v) => { const lo = Math.min(...arr), hi = Math.max(...arr); return lo === hi ? f(lo) : `${f(lo)}–${f(hi)}`; };
-        const ariText = !ga.length ? '僅含目前設定'
+        const ariText = !ga.length ? (hasRef ? '僅含目前設定' : '無可比較的 ARI')
           : ga.length === 1 ? `與目前分群的 ARI = <b>${ga[0].toFixed(3)}</b>`
           : `ARI 中位數 <b>${med(ga).toFixed(3)}</b>（${rng(ga, v => v.toFixed(3))}）`;
-        const capTag = g[0].sel.truncated ? `<span class="text-amber-700">（候選 ${g[0].sel.eligible} 個，受上限截斷，實際 ≥ ${g[0].sel.effectiveMin} 篇）</span>` : '';
-        return `<li>${weightLabel(g[0].weightMode)}、門檻 ≥ ${g[0].minOcc}${capTag}（${g[0].N} 個節點、涵蓋率 ${(g[0].coverage * 100).toFixed(1)}%；γ ${rng(gs)}）：` +
-          `${ariText}；聚落數 ${rng(gk)}${hasRef ? '（含目前設定）' : ''}</li>`;
+        const capTag = g[0].sel.truncated ? `<span class="text-amber-700">（候選 ${g[0].sel.eligible} 個，受上限截斷，相當於 ≥ ${g[0].sel.equivalentMin} 篇）</span>` : '';
+        return `<li>${head}${capTag}（${g[0].N} 個節點、涵蓋率 ${(g[0].coverage * 100).toFixed(1)}%；γ ${rng(gs)}）：` +
+          `${ariText}；聚落數 ${rng(gd.map(c => c.clusterCount))}${hasRef ? '（含目前設定）' : ''}</li>`;
       }).join('') : '';
-      const coreText = core === vals.length
+      const coreText = !vals.length ? '沒有可計算跨設定一致度的關鍵字。'
+        : core === vals.length
         ? `<b>全部 ${core} 個</b>關鍵字的跨設定一致度皆 ≥ ${SENS_CORE.toFixed(2)}，在這些設定下都穩定歸屬同一聚落。`
         : `<b>${core} 個（${(core / Math.max(1, vals.length) * 100).toFixed(0)}%）</b>的跨設定一致度 ≥ ${SENS_CORE.toFixed(2)}，可視為核心詞；其餘 ${vals.length - core} 個為隨設定改變歸屬的邊界詞。`;
 
-      document.getElementById('sensSummary').innerHTML = others.length
-        ? `<b>摘要：</b>共比較 ${others.length} 組設定${missingRef}。與目前分群的 ARI 中位數為 <b>${median.toFixed(3)}</b>（範圍 ${aris[0].toFixed(3)}–${aris[aris.length - 1].toFixed(3)}）；聚落數介於 ${Math.min(...kc)}–${Math.max(...kc)} 個。目前 ${refIds.length} 個關鍵字中，${coreText}ARI 越接近 1，表示該設定的分群與目前分群越一致。` +
-          (groupLines ? `<div class="mt-2"><b>分組結果</b>（以上整體數字混合了不同邊權重或門檻，請優先參考分組結果）：<ul class="list-disc pl-5 mt-1 space-y-0.5">${groupLines}</ul></div>` : '') + capWarning
-        : '<b>摘要：</b>沒有可供比較的其他設定，請增加 γ 值、門檻或邊權重選項。';
+      document.getElementById('sensSummary').innerHTML = (others.length
+        ? `<b>摘要：</b>共比較 ${others.length} 組設定${missingRef}。與目前分群的 ARI 中位數為 <b>${med(aris).toFixed(3)}</b>（範圍 ${aris[0].toFixed(3)}–${aris[aris.length - 1].toFixed(3)}）；聚落數介於 ${rng(kc)} 個。目前 ${refIds.length} 個關鍵字中，${coreText}ARI 越接近 1，表示該設定的分群與目前分群越一致。各設定的 Qγ 建立在不同的 γ 或網路上，彼此不可直接比較大小。` +
+          (groupLines ? `<div class="mt-2"><b>分組結果</b>（以上整體數字混合了不同邊權重或門檻，請優先參考分組結果）：<ul class="list-disc pl-5 mt-1 space-y-0.5">${groupLines}</ul></div>` : '')
+        : `<b>摘要：</b>${done.filter(c => c.isRef).length > 1 || skipped.length
+            ? '可分群的設定都與目前分群使用相同的網路與參數，或未進行分群，因此沒有可供比較的其他設定。'
+            : '沒有可供比較的其他設定，請增加 γ 值、門檻或邊權重選項。'}`) + capWarning + skipNote;
 
-      document.getElementById('sensConfigBody').innerHTML = configs.map(c => `
-        <tr class="${c.isRef ? 'bg-indigo-50 font-semibold' : ''}">
+      document.getElementById('sensConfigBody').innerHTML = configs.map(c => {
+        const selTitle = c.sel.truncated ? `候選關鍵字超過節點上限 ${c.sel.cap} 個；入圖節點集合相當於門檻 ≥ ${c.sel.equivalentMin} 篇`
+          : c.sel.strictTooFew ? `嚴格門檻下只有 ${c.sel.eligible} 個關鍵字，未自動放寬` : '未發生截斷';
+        const na = `<span class="text-slate-400" title="${escapeHtmlAttr(c.reason || '')}">—</span>`;
+        return `
+        <tr class="${c.isRef ? 'bg-indigo-50 font-semibold' : c.computable ? '' : 'text-slate-400'}">
           <td class="py-1.5 px-2.5">${weightLabel(c.weightMode)}${c.isRef ? ' <span class="text-indigo-700">（目前設定）</span>' : ''}</td>
           <td class="py-1.5 px-2 text-right">${c.gamma}</td>
           <td class="py-1.5 px-2 text-right">≥ ${c.minOcc}</td>
-          <td class="py-1.5 px-2 text-right whitespace-nowrap ${c.sel.truncated ? 'text-amber-700 font-semibold' : 'text-slate-500'}"
-            title="${c.sel.truncated ? `候選關鍵字超過節點上限 ${c.sel.cap} 個；實際入圖條件相當於門檻 ≥ ${c.sel.effectiveMin} 篇` : '未發生截斷'}">${c.sel.eligible} → ${c.sel.selected}${c.sel.truncated ? ' ⚠️' : ''}</td>
+          <td class="py-1.5 px-2 text-right whitespace-nowrap ${c.sel.truncated ? 'text-amber-700 font-semibold' : ''}" title="${escapeHtmlAttr(selTitle)}">${c.sel.eligible} → ${c.sel.selected}${c.sel.truncated ? ' ⚠️' : ''}</td>
           <td class="py-1.5 px-2 text-right">${c.N}</td>
           <td class="py-1.5 px-2 text-right">${(c.coverage * 100).toFixed(1)}%</td>
-          <td class="py-1.5 px-2 text-right">${c.clusterCount}</td>
-          <td class="py-1.5 px-2 text-right">${c.Q.toFixed(3)}</td>
-          <td class="py-1.5 px-2 text-right">${c.stabARI == null ? '—' : c.stabARI.toFixed(3)}</td>
-          <td class="py-1.5 px-2 text-right ${c.ari == null ? '' : c.ari < 0.5 ? 'text-rose-600' : c.ari < 0.8 ? 'text-amber-600' : 'text-emerald-700'}">${c.ari == null ? '—' : c.ari.toFixed(3)}</td>
+          <td class="py-1.5 px-2 text-right">${c.computable ? c.clusterCount : na}</td>
+          <td class="py-1.5 px-2 text-right">${c.computable ? fmtQ(c.Qgamma) : na}</td>
+          <td class="py-1.5 px-2 text-right">${c.computable ? fmtQ(c.Q1) : na}</td>
+          <td class="py-1.5 px-2 text-right">${c.stabARI == null ? na : c.stabARI.toFixed(3)}</td>
+          <td class="py-1.5 px-2 text-right ${c.ari == null ? '' : c.ari < 0.5 ? 'text-rose-600' : c.ari < 0.8 ? 'text-amber-600' : 'text-emerald-700'}">${c.ari == null ? na : c.ari.toFixed(3)}</td>
           <td class="py-1.5 px-2.5 text-right">${c.common}</td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
 
       const byCluster = new Map();
       r.nodes.forEach(n => { if (!byCluster.has(n.cluster)) byCluster.set(n.cluster, []); byCluster.get(n.cluster).push(n); });
@@ -3186,15 +3288,18 @@
           const cls = v == null ? 'bg-slate-100 text-slate-500' : v >= SENS_CORE ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : v >= 0.5 ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-rose-50 text-rose-900 border border-rose-200';
           return `<span class="px-2 py-0.5 rounded ${cls}" title="${v == null ? '沒有可比較的設定' : `跨 ${consCnt.get(n.id)} 組設定的平均一致度`}">${escapeHtml(n.id)} <b>${v == null ? '—' : v.toFixed(2)}</b></span>`;
         };
-        const coreM = members.filter(n => (consistency.get(n.id) ?? 0) >= SENS_CORE);
-        const edgeM = members.filter(n => !((consistency.get(n.id) ?? 0) >= SENS_CORE));
+        // 沒有任何可比較設定的關鍵字標為「未比較」，不歸入邊界詞
+        const coreM = members.filter(n => consistency.get(n.id) != null && consistency.get(n.id) >= SENS_CORE);
+        const edgeM = members.filter(n => consistency.get(n.id) != null && consistency.get(n.id) < SENS_CORE);
+        const naM = members.filter(n => consistency.get(n.id) == null);
+        const counts = [`核心 ${coreM.length} 個`, `邊界 ${edgeM.length} 個`].concat(naM.length ? [`未比較 ${naM.length} 個`] : []).join('、');
         return `
           <div class="border border-slate-200 rounded-lg p-3">
             <div class="flex items-center gap-2 mb-1.5">
               <span class="px-2 py-0.5 rounded-full text-white font-bold text-[11px]" style="background:${color}">C${cid}</span>
-              <span class="text-slate-600">${members.length} 個關鍵字；核心 ${coreM.length} 個、邊界 ${edgeM.length} 個</span>
+              <span class="text-slate-600">${members.length} 個關鍵字；${counts}</span>
             </div>
-            <div class="flex flex-wrap gap-1.5 text-[11px]">${coreM.map(chip).join('')}${edgeM.length ? `<span class="text-slate-400 px-1">｜邊界：</span>${edgeM.map(chip).join('')}` : ''}</div>
+            <div class="flex flex-wrap gap-1.5 text-[11px]">${coreM.map(chip).join('')}${edgeM.length ? `<span class="text-slate-400 px-1">｜邊界：</span>${edgeM.map(chip).join('')}` : ''}${naM.length ? `<span class="text-slate-400 px-1">｜未比較：</span>${naM.map(chip).join('')}` : ''}</div>
           </div>`;
       }).join('');
       document.getElementById('sensResults').classList.remove('hidden');
@@ -3202,19 +3307,29 @@
 
     function exportSensConfigsCsv() {
       if (!SENS.results) return;
+      const q = v => (v == null ? '' : +v.toFixed(4));
       const rows = SENS.results.configs.map(c => ({
         Edge_Weight: c.weightMode === 'assoc' ? 'association strength' : 'raw co-occurrence',
         Resolution_Gamma: c.gamma,
-        Min_Occurrences: c.minOcc,
+        Requested_Min_Occurrences: c.sel.requestedMin,
+        Applied_Min_Occurrences: c.sel.appliedMin,
+        Threshold_Relaxed: c.sel.relaxed ? 'yes' : 'no',
+        Relaxation_Reason: c.sel.relaxationReason || '',
         Candidates: c.sel.eligible,
-        Truncated_by_Node_Cap: c.sel.truncated ? 'yes' : '',
-        Effective_Min_Occurrences: c.sel.effectiveMin,
+        Truncated_by_Node_Cap: c.sel.truncated ? 'yes' : 'no',
+        Node_Cap: c.sel.cap,
+        Tie_Handling: c.sel.tieMode === 'include' ? 'include' : 'exclude',
+        Equivalent_Min_Occurrences: c.sel.equivalentMin,
+        Min_Observed_Occurrences: c.sel.minObserved ?? '',
         Nodes: c.N,
         Coverage_Percent: +(c.coverage * 100).toFixed(2),
-        Clusters: c.clusterCount,
-        Modularity_Q: +c.Q.toFixed(4),
-        Stability_Mean_ARI_100_runs: c.stabARI == null ? '' : +c.stabARI.toFixed(4),
-        ARI_vs_Current: c.ari == null ? '' : +c.ari.toFixed(4),
+        Clustering_Computed: c.computable ? 'yes' : 'no',
+        Not_Computed_Reason: c.reason || '',
+        Clusters: c.clusterCount ?? '',
+        Objective_Q_gamma: q(c.Qgamma),
+        Standard_Q1: q(c.Q1),
+        Stability_Mean_ARI_100_runs: q(c.stabARI),
+        ARI_vs_Current: q(c.ari),
         Common_Nodes: c.common,
         Is_Current_Setting: c.isRef ? 'yes' : ''
       }));
@@ -3232,11 +3347,11 @@
           Occurrences: n.occurrences,
           Cross_Setting_Consistency: v == null ? '' : +v.toFixed(4),
           Settings_Compared: consCnt.get(n.id),
-          Role: v == null ? '' : v >= SENS_CORE ? 'core' : 'boundary'
+          Role: v == null ? 'not compared' : v >= SENS_CORE ? 'core' : 'boundary'
         };
         configs.forEach(c => {
           const key = `${c.weightMode === 'assoc' ? 'AS' : 'RAW'}_g${c.gamma}_min${c.minOcc}`;
-          row[key] = c.labels.get(n.id) || '(not in network)';
+          row[key] = !c.inNetwork.has(n.id) ? '(not in network)' : !c.computable ? '(not computed)' : c.labels.get(n.id);
         });
         return row;
       });
