@@ -670,8 +670,8 @@
     /********************************************************************
      * 版本資訊：每次發布新版本時，只需修改這兩個常數（頁尾會自動更新）
      ********************************************************************/
-    const APP_VERSION = '5.8';
-    const APP_UPDATED = '2026-10-31';
+    const APP_VERSION = '5.9';
+    const APP_UPDATED = '2026-11-02';
     document.getElementById('appVersion').textContent = APP_VERSION;
     document.getElementById('appUpdated').textContent = APP_UPDATED;
 
@@ -1345,9 +1345,11 @@
      *   requestedMin    使用者要求的入圖門檻
      *   appliedMin      實際用來篩選的門檻（自動放寬時為 1，否則等於 requestedMin）
      *   relaxed / relaxationReason  是否自動放寬及原因
-     *   strictTooFew    嚴格模式下節點少於 3 個（未放寬）
+     *   strictTooFew    嚴格模式下，要求門檻 > 1 且達門檻的候選少於 3 個、因而未依主分析規則放寬
+     *                   （僅描述「是否本應放寬」；最終入圖數是否少於 3 個請看 selected）
      *   truncated / tieValue / tieCount / tieMode  節點上限截斷與邊界同分處理
-     *   equivalentMin   能得到相同入圖節點集合的最小門檻（未截斷時等於 appliedMin）
+     *   equivalentMin   不低於 appliedMin、且單獨以「出現篇數 ≥ equivalentMin」篩選（不再套用節點上限）
+     *                   即可重現入圖節點集合的最小門檻；未截斷時等於 appliedMin
      *   minObserved     入圖關鍵字中最低的實際出現篇數（描述值，不等於篩選門檻）
      * allowRelaxation = false（嚴格模式）供敏感度分析使用：節點不足時不放寬，如實回報。
      */
@@ -1380,11 +1382,12 @@
         } else {
           entries = entries.slice(0, cap);
         }
-        // 被排除的候選中最高的出現篇數 + 1，即為能重現此節點集合的最小門檻
+        // 被上限或同分規則排除的候選中，最高出現篇數 + 1；並不得低於實際採用門檻
+        // （同分整批納入時可能沒有被排除的候選，此時等效門檻即為 appliedMin）
         const kept = new Set(entries.map(e => e[0]));
         let maxExcluded = 0;
         for (const [t, c] of mergedFreqMap) if (c >= info.appliedMin && !kept.has(t) && c > maxExcluded) maxExcluded = c;
-        info.equivalentMin = maxExcluded + 1;
+        info.equivalentMin = Math.max(info.appliedMin, maxExcluded + 1);
       }
       info.selected = entries.length;
       info.minObserved = entries.length ? entries[entries.length - 1][1] : null;
@@ -1551,9 +1554,9 @@
       renderStabilityNote(clusterInfo, N, coverage, selectionInfo);
 
       const density = N > 1 ? ((2 * links.length) / (N * (N - 1))).toFixed(3) : 0;
-      const clusterCount = new Set(nodes.map(n => n.cluster)).size;
+      const clusterCount = clusterInfo.computable ? new Set(nodes.map(n => n.cluster)).size : null;
       document.getElementById('snaMacroStats').textContent =
-        `入圖節點: ${N} | 共現連線: ${links.length} | 網路密度: ${density} | 聚落數: ${clusterCount} | ${qSummaryText(clusterInfo, 'zh', ' | ')}`;
+        `入圖節點: ${N} | 共現連線: ${links.length} | 網路密度: ${density} | 聚落數: ${clusterCount ?? '不適用（未執行分群）'} | ${qSummaryText(clusterInfo, 'zh', ' | ')}`;
 
       // 複製一份依 TLS 排序供表格呈現
       const tableNodes = [...nodes].sort((a, b) => (b.tls - a.tls) || (b.occurrences - a.occurrences));
@@ -1717,12 +1720,13 @@
       const gamma = opts.gamma > 0 ? opts.gamma : 1;
       const info = { computable: false, Qgamma: null, Q1: null, weightMode, gamma, stability: null };
       if (N === 0) return info;
+      if (N === 1) { nodes[0].cluster = null; nodes[0].stability = null; return info; }
       const W = buildClusteringWeights(matrix, N, weightMode);
       let totalW = 0;
       for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) totalW += W[i][j];
       if (totalW === 0) {
-        // 無連線：每個節點各自一群，不計算 Q 與穩定性
-        nodes.forEach((n, i) => { n.cluster = i + 1; n.stability = null; });
+        // 無連線：未執行分群，聚落編號為 null（不以每個節點各自一群的占位編號呈現為主題聚落）
+        nodes.forEach(n => { n.cluster = null; n.stability = null; });
         return info;
       }
       info.computable = true;
@@ -1803,6 +1807,10 @@
     }
 
     const fmtQ = (v, d = 3) => (v == null ? '不適用' : v.toFixed(d));
+    // 聚落標示：未執行分群的節點 cluster 為 null，一律以「未分群」與中性灰色呈現
+    const UNCLUSTERED_COLOR = '#94a3b8';
+    const clusterLabel = c => (c == null ? '未分群' : `C${c}`);
+    const clusterColor = c => (c == null ? UNCLUSTERED_COLOR : CLUSTER_COLORS[(c - 1) % CLUSTER_COLORS.length]);
     const isGammaOne = g => Math.abs(g - 1) < 1e-12;
 
     // 模組度摘要文字：γ = 1 時只顯示 Q；γ ≠ 1 時分別顯示選解依據 Qγ 與標準模組度 Q1
@@ -1858,7 +1866,7 @@
 
       const fragment = document.createDocumentFragment();
       tableNodes.forEach((n, idx) => {
-        const color = CLUSTER_COLORS[(n.cluster - 1) % CLUSTER_COLORS.length];
+        const color = clusterColor(n.cluster);
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-indigo-50 cursor-pointer';
         tr.dataset.term = n.id;
@@ -1867,7 +1875,7 @@
           <td class="py-2 px-2.5 text-center text-slate-400 font-bold">${idx + 1}</td>
           <td class="py-2 px-2.5 font-semibold text-slate-800">${escapeHtml(n.id)}</td>
           <td class="py-2 px-2 text-center">
-            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold text-white" style="background-color:${color}">C${n.cluster}</span>
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold text-white" style="background-color:${color}">${clusterLabel(n.cluster)}</span>
           </td>
           <td class="py-2 px-2 text-right text-slate-700 font-medium">${n.occurrences}</td>
           <td class="py-2 px-2 text-right font-bold text-indigo-700">${n.tls}</td>
@@ -1912,7 +1920,11 @@
 
       const legendEl = document.getElementById('canvasLegend');
       legendEl.classList.remove('hidden');
-      if (currentGraphMode === 'cluster') {
+      if (currentGraphMode === 'cluster' && d3Nodes.every(n => n.cluster == null)) {
+        legendEl.innerHTML = d3Nodes.length === 0
+          ? `<b>沒有入圖節點：</b>請調整入圖門檻或節點上限。`
+          : `<b>未執行分群：</b>入圖節點之間沒有任何共現連線，節點以灰色顯示。`;
+      } else if (currentGraphMode === 'cluster') {
         const uniqueClusters = Array.from(new Set(d3Nodes.map(n => n.cluster))).sort((a, b) => a - b).slice(0, 6);
         legendEl.innerHTML = `<b>Louvain 主題聚落：</b> ` + uniqueClusters.map(c => {
           const col = CLUSTER_COLORS[(c - 1) % CLUSTER_COLORS.length];
@@ -1924,7 +1936,7 @@
 
       const getNodeColor = (d) => {
         if (currentGraphMode === 'overlay') return d.avgYear == null ? '#94a3b8' : yearColorScale(d.avgYear);
-        return CLUSTER_COLORS[(d.cluster - 1) % CLUSTER_COLORS.length];
+        return clusterColor(d.cluster);
       };
 
       const maxOcc = Math.max(...d3Nodes.map(n => n.occurrences), 1);
@@ -2072,7 +2084,7 @@
       const rows = computedSnaResults.tableNodes.map((n, idx) => ({
         Rank: idx + 1,
         Keyword: n.id,
-        Cluster: `Cluster ${n.cluster}`,
+        Cluster: n.cluster == null ? 'not computed' : `Cluster ${n.cluster}`,
         Occurrences: n.occurrences,
         Total_Link_Strength_TLS: n.tls,
         Degree_Centrality: n.degree,
@@ -2336,7 +2348,7 @@
     const fsFontPx = (d, o) => o.fontScale ? o.fontSize * (0.85 + 0.75 * Math.sqrt(d.occurrences / FS.maxOcc)) : o.fontSize;
     const fsLabelWeight = d => d.occurrences >= FS.maxOcc * 0.4 ? 700 : 400;
     const fsHasLabel = (d, o) => d.occurrences >= o.labelMin;
-    const fsClusterColor = (c, th) => c <= CLUSTER_COLORS.length ? CLUSTER_COLORS[c - 1] : th.other;
+    const fsClusterColor = (c, th) => c == null ? UNCLUSTERED_COLOR : c <= CLUSTER_COLORS.length ? CLUSTER_COLORS[c - 1] : th.other;
 
     function fsCollideRadius(d, o) {
       const r = fsRadius(d, o) + 3;
@@ -2485,7 +2497,7 @@
         .attr('fill', 'none')
         .attr('stroke-width', l => +wScale(l.weight).toFixed(2))
         .attr('stroke-linecap', 'round')
-        .attr('stroke', l => (o.linkCluster && o.color === 'cluster' && l.source.cluster === l.target.cluster && l.source.cluster <= CLUSTER_COLORS.length)
+        .attr('stroke', l => (o.linkCluster && o.color === 'cluster' && l.source.cluster != null && l.source.cluster === l.target.cluster && l.source.cluster <= CLUSTER_COLORS.length)
           ? fsClusterColor(l.source.cluster, th) : th.link)
         .attr('stroke-opacity', o.linkOpacity);
       FS.hitSel = FS.gHit.selectAll('path')
@@ -2533,7 +2545,7 @@
         .attr('stroke', th.broker).attr('stroke-width', 2.4)
         .attr('display', d => (o.brokers > 0 && d.bRank && d.bRank <= o.brokers) ? null : 'none');
       FS.nodeSel.select('title').text(d =>
-        `${d.id}\n聚落: C${d.cluster}\n出現篇數: ${d.occurrences}\nTLS: ${d.tls}\n中介中心性: ${d.betweenness}\n分群穩定度: ${d.stability ?? '—'}\n平均發表年份: ${d.avgYear ?? '無年份資料'}`);
+        `${d.id}\n聚落: ${clusterLabel(d.cluster)}\n出現篇數: ${d.occurrences}\nTLS: ${d.tls}\n中介中心性: ${d.betweenness}\n分群穩定度: ${d.stability ?? '—'}\n平均發表年份: ${d.avgYear ?? '無年份資料'}`);
       fsRefreshPins();
 
       const labeled = FS.nodes.filter(d => fsHasLabel(d, o));
@@ -2612,7 +2624,11 @@
       };
 
       if (o.showLegend) {
-        if (o.color === 'cluster') {
+        if (o.color === 'cluster' && FS.nodes.every(n => n.cluster == null)) {
+          y += 14;
+          w = Math.max(w, text(0, y, zh ? '未執行分群：入圖節點之間沒有任何共現連線' : 'Clustering not performed: no co-occurrence links among the included keywords', { weight: 700 }));
+          y += 8;
+        } else if (o.color === 'cluster') {
           const byCluster = new Map();
           FS.nodes.forEach(n => {
             if (!byCluster.has(n.cluster)) byCluster.set(n.cluster, []);
@@ -2685,8 +2701,8 @@
         const m = computedSnaResults.macro;
         y += lh;
         const s = zh
-          ? `節點 ${m.N}｜連線 ${m.L}｜網路密度 ${m.density.toFixed(3)}｜聚落 ${m.clusterCount}｜${qSummaryText(m.clusterInfo, 'zh')}${m.coverage != null ? `｜涵蓋率 ${(m.coverage * 100).toFixed(1)}%` : ''}`
-          : `Nodes = ${m.N}; Links = ${m.L}; Density = ${m.density.toFixed(3)}; Clusters = ${m.clusterCount}; ${qSummaryText(m.clusterInfo, 'en')}${m.coverage != null ? `; Coverage = ${(m.coverage * 100).toFixed(1)}%` : ''}`;
+          ? `節點 ${m.N}｜連線 ${m.L}｜網路密度 ${m.density.toFixed(3)}｜聚落 ${m.clusterCount ?? '不適用'}｜${qSummaryText(m.clusterInfo, 'zh')}${m.coverage != null ? `｜涵蓋率 ${(m.coverage * 100).toFixed(1)}%` : ''}`
+          : `Nodes = ${m.N}; Links = ${m.L}; Density = ${m.density.toFixed(3)}; Clusters = ${m.clusterCount ?? 'n/a'}; ${qSummaryText(m.clusterInfo, 'en')}${m.coverage != null ? `; Coverage = ${(m.coverage * 100).toFixed(1)}%` : ''}`;
         w = Math.max(w, text(0, y, s, { fill: th.muted }));
         y += lh;
         w = Math.max(w, text(0, y, zh ? `入圖條件：${inclusionText(m.selectionInfo, 'zh')}` : `Inclusion: ${inclusionText(m.selectionInfo, 'en')}`, { fill: th.muted }));
@@ -2906,9 +2922,9 @@
       DP.terms = [n.id];
       DP.title = n.id;
       DP.items = r.nodeDocs[idx].map(x => ({ doc: x.doc, matched: [{ term: n.id, raws: x.raws }] }));
-      const color = CLUSTER_COLORS[(n.cluster - 1) % CLUSTER_COLORS.length];
+      const color = clusterColor(n.cluster);
       DP.metaHtml = `
-        <span class="px-2 py-0.5 rounded-full text-white font-bold" style="background:${color}">C${n.cluster}</span>
+        <span class="px-2 py-0.5 rounded-full text-white font-bold" style="background:${color}">${clusterLabel(n.cluster)}</span>
         <span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-semibold">${DP.items.length} 篇文獻</span>
         <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">TLS ${n.tls}</span>
         <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700">中介中心性 ${n.betweenness}</span>
@@ -3079,6 +3095,15 @@
       return { ids: entries.map(([t]) => t), occ: entries.map(([, c]) => c), matrix, N, coverage: computeCoverage(mergedFreqMap, entries), selection };
     }
 
+    // 不進行分群的原因：依序區分無候選、候選全被上限／同分規則排除、節點過少（無連線另於分群後判定）
+    function sensNotComputedReason(net) {
+      const sel = net.selection;
+      if (sel.eligible === 0) return `沒有出現篇數 ≥ ${sel.appliedMin} 篇的關鍵字`;
+      if (net.N === 0) return `${sel.eligible} 個候選關鍵字全數因節點上限 ${sel.cap} 與邊界同分整批排除規則而未入圖`;
+      if (net.N < SENS_MIN_NODES) return `入圖節點少於 ${SENS_MIN_NODES} 個`;
+      return '';
+    }
+
     const parseNumList = (str, isInt) => Array.from(new Set(
       str.split(/[,，、\s]+/).map(v => (isInt ? parseInt(v, 10) : parseFloat(v))).filter(v => isFinite(v) && v > 0)
     )).sort((a, b) => a - b);
@@ -3092,7 +3117,14 @@
       const relaxNote = m.selectionInfo.relaxed
         ? `<br><span class="text-amber-800">⚠️ 目前分群的入圖門檻已由 ≥ ${m.minOcc} 篇自動放寬為 ≥ 1 篇；敏感度分析採嚴格門檻、不自動放寬，因此門檻 ≥ ${m.minOcc} 的比較結果不等於目前分群。</span>` : '';
       document.getElementById('sensRefInfo').innerHTML =
-        `<b>比較基準（目前分群）：</b>邊權重 ${weightLabel(m.clusterInfo.weightMode)}、γ = ${m.clusterInfo.gamma}、入圖門檻 ≥ ${m.minOcc} 篇、節點上限 ${m.selectionInfo.cap} 個（邊界同分${m.selectionInfo.tieMode === 'include' ? '整批納入' : '整批排除'}）、實際 ${m.N} 個節點、${m.clusterCount} 個聚落。改變門檻時，節點上限與同分處理方式沿用此設定；門檻一律嚴格執行，節點少於 ${SENS_MIN_NODES} 個或無連線的設定不進行分群。若要改變基準，請先在步驟三調整設定，再開啟本視窗。${relaxNote}`;
+        `<b>比較基準（目前分群）：</b>邊權重 ${weightLabel(m.clusterInfo.weightMode)}、γ = ${m.clusterInfo.gamma}、入圖門檻 ≥ ${m.minOcc} 篇、節點上限 ${m.selectionInfo.cap} 個（邊界同分${m.selectionInfo.tieMode === 'include' ? '整批納入' : '整批排除'}）、實際 ${m.N} 個節點、${m.clusterCount == null ? '未執行分群' : `${m.clusterCount} 個聚落`}。改變門檻時，節點上限與同分處理方式沿用此設定；門檻一律嚴格執行，節點少於 ${SENS_MIN_NODES} 個或無連線的設定不進行分群。若要改變基準，請先在步驟三調整設定，再開啟本視窗。${relaxNote}`;
+      // 目前分析未執行分群（無連線）時，沒有可作為比較基準的分群
+      const canCompare = m.clusterInfo.computable;
+      document.getElementById('sensRun').disabled = !canCompare;
+      if (!canCompare) {
+        document.getElementById('sensRefInfo').innerHTML +=
+          `<br><span class="text-rose-700">⚠️ ${m.N === 0 ? '目前沒有任何入圖節點' : '目前的入圖節點之間沒有任何共現連線'}，未執行分群，因此沒有可作為比較基準的分群。請先在步驟三調整入圖門檻或節點上限。</span>`;
+      }
       if (SENS.results && SENS.results.refToken !== computedSnaResults) {
         SENS.results = null;
         document.getElementById('sensResults').classList.add('hidden');
@@ -3120,6 +3152,7 @@
     async function runSensitivity() {
       if (SENS.running || !computedSnaResults) return;
       const r = computedSnaResults, m = r.macro;
+      if (!m.clusterInfo.computable) return;
       const gammas = parseNumList(document.getElementById('sensGammas').value, false);
       const minOccs = parseNumList(document.getElementById('sensMinOccs').value, true);
       const weights = [];
@@ -3155,11 +3188,11 @@
         c.isRef = c.weightMode === m.clusterInfo.weightMode && Math.abs(c.gamma - m.clusterInfo.gamma) < 1e-9 &&
           net.N === refIds.length && refIds.every(id => c.inNetwork.has(id));
         c.computable = false;
-        c.reason = net.N === 0 ? '沒有符合門檻的關鍵字' : net.N < SENS_MIN_NODES ? `節點少於 ${SENS_MIN_NODES} 個` : '';
+        c.reason = sensNotComputedReason(net);
         if (c.reason) continue;
         const tmpNodes = net.ids.map((id, i) => ({ id, occurrences: net.occ[i] }));
         const info = assignLouvainClusters(tmpNodes, net.matrix, net.N, { weightMode: c.weightMode, gamma: c.gamma });
-        if (!info.computable) { c.reason = '網路無連線'; continue; }
+        if (!info.computable) { c.reason = `${net.N} 個入圖節點之間沒有任何共現連線`; continue; }
         c.computable = true;
         const cfgById = new Map(tmpNodes.map(n => [n.id, n.cluster]));
         const common = refIds.filter(id => cfgById.has(id));

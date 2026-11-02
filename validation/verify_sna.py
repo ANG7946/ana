@@ -15,6 +15,12 @@ VOSviewer & SNA 知識結構分析工作台：網路指標獨立驗證腳本
   python verify_sna.py Cooccurrence_Matrix_日期.csv SNA_Centrality_Metrics_日期.csv
   若工作台的「分群邊權重」選的是「原始共現次數」，請在最後加上 --raw
   若解析度 γ 不是 1，請加上 --gamma 數值，例如 --gamma 1.2
+  （選用）加上工作台報表顯示的模組度，改為自動比對、不必人工對照：
+    --expect-q 數值    工作台顯示的 Q（γ = 1）或 Qγ（γ ≠ 1）
+    --expect-q1 數值   工作台顯示的標準模組度 Q1（γ ≠ 1 時）
+  比對容許差 0.0005（工作台畫面四捨五入至小數 3 位）。
+
+結束碼：所有自動核對項目皆通過時為 0；任一項不一致時為 1；參數或檔案錯誤時為 2。
 
 驗證項目：
   - 總連結強度（TLS）、度中心性、正規化度中心性、中介中心性
@@ -40,13 +46,16 @@ def read_metrics(path):
 
 def main():
     argv = sys.argv[1:]
-    gamma = 1.0
-    if '--gamma' in argv:
-        k = argv.index('--gamma'); gamma = float(argv[k + 1]); del argv[k:k + 2]
+    def take(flag):
+        if flag in argv:
+            k = argv.index(flag); v = float(argv[k + 1]); del argv[k:k + 2]; return v
+        return None
+    gamma = take('--gamma') or 1.0
+    expect_q, expect_q1 = take('--expect-q'), take('--expect-q1')
     args = [a for a in argv if not a.startswith('--')]
     use_raw = '--raw' in argv
     if len(args) != 2:
-        print(__doc__); sys.exit(1)
+        print(__doc__); sys.exit(2)
     ids, M = read_matrix(args[0])
     T = read_metrics(args[1])
     N = len(ids)
@@ -84,17 +93,26 @@ def main():
     for i in range(N): part[T[ids[i]]['Cluster']].add(i)
     Q = modularity(W, list(part.values()), weight='weight', resolution=gamma)
     Q1 = modularity(W, list(part.values()), weight='weight', resolution=1)
-    if gamma == 1:
-        print(f'\n  工作台分群的模組度 Q（NetworkX 重算）= {Q:.4f}　← 請與工作台報表上方的 Q 值對照，應相同至小數 3 位')
+    print()
+    if expect_q is None:
+        # 未提供工作台的 Q 值：只能列出重算結果供人工對照，不列入自動核對項目
+        if gamma == 1:
+            print(f'  （人工對照）工作台分群的模組度 Q（NetworkX 重算）= {Q:.4f}；請與工作台報表上方的 Q 值對照，應相同至小數 3 位')
+        else:
+            print(f'  （人工對照）工作台分群的 Qγ（γ = {gamma:g}，NetworkX 重算）= {Q:.4f}；標準模組度 Q1 = {Q1:.4f}')
+            print('  　請與工作台報表上方的 Qγ 與 Q1 對照，應相同至小數 3 位；或加上 --expect-q／--expect-q1 改為自動比對')
     else:
-        print(f'\n  工作台分群的 Qγ（γ = {gamma:g}，NetworkX 重算）= {Q:.4f}；標準模組度 Q1 = {Q1:.4f}')
-        print('  ← 請與工作台報表上方的 Qγ 與 Q1 對照，應相同至小數 3 位')
+        check('工作台回報的 ' + ('Q' if gamma == 1 else 'Qγ'), abs(Q - expect_q) <= 5e-4, f'NetworkX {Q:.4f}；工作台 {expect_q:g}')
+    if expect_q1 is not None:
+        check('工作台回報的標準模組度 Q1', abs(Q1 - expect_q1) <= 5e-4, f'NetworkX {Q1:.4f}；工作台 {expect_q1:g}')
     check('每個聚落內部皆連通', all(nx.is_connected(W.subgraph(s)) for s in part.values() if len(s) > 1), f'{len(part)} 個聚落')
     qs = [modularity(W, louvain_communities(W, weight='weight', resolution=gamma, seed=s), weight='weight', resolution=gamma) for s in range(100)]
     print(f'  NetworkX Louvain（γ = {gamma:g}）100 次：Qγ 最佳 {max(qs):.4f}、平均 {sum(qs)/len(qs):.4f}')
-    check('工作台 Qγ 不低於參考實作最佳值（容許 0.005）', max(qs) - Q <= 0.005)
+    # 品質提示：與參考實作的最佳值比較。啟發式演算法沒有唯一正確解，此項為品質門檻，不是正確性證明
+    check('（品質提示）工作台 Qγ 不低於參考實作最佳值 0.005 以上', max(qs) - Q <= 0.005)
 
-    print(f'\n結果：{sum(results)} / {len(results)} 項通過')
+    print(f'\n結果：{sum(results)} / {len(results)} 項自動核對通過')
+    sys.exit(0 if all(results) else 1)
 
 if __name__ == '__main__':
     main()
