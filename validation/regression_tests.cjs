@@ -54,7 +54,7 @@ function test(name, fn) { queue.push({ name, fn }); }
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 const EPS = 1e-10;
 
-// ---------- 1. Qγ 選解一致性（ChatGPT 檢核文件 §3.3 最小案例） ----------
+// ---------- 1. Qγ 選解一致性（v5.7 檢核文件 §3.3 最小案例） ----------
 test('1. 最小案例：γ = 1.2 時選出候選中 Qγ 最高的分群', () => {
   const W = [[0, 4, 3, 2], [4, 0, 0, 0], [3, 0, 0, 0], [2, 0, 0, 0]];
   const nodes = ['A', 'B', 'C', 'D'].map((id, i) => ({ id, occurrences: [9, 4, 3, 2][i] }));
@@ -153,7 +153,7 @@ test('7. 調整蘭德指數與 scikit-learn 1.9.1 參考值一致', () => {
   return `${cases.length} 組`;
 });
 
-// ---------- 2. 入圖節點篩選（ChatGPT 檢核文件 §4） ----------
+// ---------- 2. 入圖節點篩選（v5.7 檢核文件 §4） ----------
 const freq = entries => new Map(entries);
 test('8. 嚴格模式：門檻 ≥ 9 只選出 A，不自動放寬', () => {
   const { entries, info } = selectSnaEntries(freq([['A', 10], ['B', 8], ['C', 2], ['D', 1]]), 9, 120, 'exclude', false);
@@ -209,7 +209,7 @@ test('12. 節點上限與邊界同分：等效門檻單獨即可重現入圖節�
   return `${checked} 組`;
 });
 
-test('13. 等效門檻邊界案例（ChatGPT 複核報告 §5.1 反例等）', () => {
+test('13. 等效門檻邊界案例（v5.8 複核報告 §5.1 反例等）', () => {
   const highs = n => Array.from({ length: n }, (_, i) => ['high' + i, 5]);
   const check = (label, f, minOcc, cap, tieMode, expectSelected, expectEq) => {
     const { entries, info } = selectSnaEntries(new Map(f), minOcc, cap, tieMode, false);

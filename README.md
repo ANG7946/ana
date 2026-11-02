@@ -6,7 +6,7 @@
 
 - 線上版本：https://ang7946.github.io/ana/
 - 開發者：林祖強（國立高雄師範大學 科學教育暨環境教育研究所）／ Tzu-Chiang Lin, Graduate Institute of Science Education and Environmental Education, National Kaohsiung Normal University, Taiwan
-- 版本：5.11（2026-11-02）
+- 版本：5.12（2026-11-02）
 
 ## 功能
 
@@ -70,7 +70,7 @@ css/tailwind.min.css       Tailwind CSS v3.4.19（預先編譯，僅含本程式
 | 5.9 | 零邊網路以占位編號顯示聚落數與「Louvain 主題聚落」 | 5.8 | 入圖節點間沒有任何連線 | 該編號不代表分群結果 |
 | 5.9 | 候選全數因上限與同分規則排除時，原因誤寫為「沒有符合門檻的關鍵字」 | 5.8 | 敏感度分析中發生上述情形 | 僅原因文字錯誤 |
 
-上表 5.9 各項由 ChatGPT 獨立複核（2026-11-01）發現。網站頁尾的「版本更新」以一句話摘要其中會改變分析結果或其解讀的項目（自 5.10 起）；新增此類修正時，請同步更新本表與程式中的 `IMPACT_NOTES`。版本引入點的依據、修正內容、驗收證據與修正前後差異，詳見 `validation/v5.8_phase1_report.md` 與 `validation/v5.9_report.md`。
+上表 5.9 各項於 v5.8 發布後的複核中發現。網站頁尾的「版本更新」以一句話摘要其中會改變分析結果或其解讀的項目（自 5.10 起）；新增此類修正時，請同步更新本表與程式中的 `IMPACT_NOTES`。版本引入點的依據、修正內容、驗收證據與修正前後差異，詳見 `validation/v5.8_phase1_report.md` 與 `validation/v5.9_report.md`。
 
 ## 授權
 
@@ -78,7 +78,7 @@ css/tailwind.min.css       Tailwind CSS v3.4.19（預先編譯，僅含本程式
 
 ## AI 輔助開發聲明
 
-本工具開發過程使用生成式 AI（Google Gemini、Anthropic Claude）協助撰寫程式碼；功能設計、方法學決策與結果驗證由開發者負責。
+本工具開發與檢核過程使用生成式 AI（Google Gemini、Anthropic Claude、OpenAI ChatGPT）協助撰寫程式碼與交叉檢查；功能設計、方法學決策、修正採納與結果驗證由開發者負責。
 
 ## 第三方函式庫授權
 
