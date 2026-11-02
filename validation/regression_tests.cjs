@@ -4,6 +4,11 @@
  * 從 index.html 抽出分群與入圖節點篩選的函式，在 Node.js 中執行，不啟動網頁、不修改原始檔。
  * 測試中的模組度一律以本檔內獨立撰寫的「逐對節點公式」計算，不沿用受測函式。
  *
+ * 第 1–14 項為數值核心單元測試；第 15–18 項為整合測試：以最小的 DOM 替身載入應用程式本身的
+ * executeSnaAndRenderGraph()、buildCoocNetwork()、runSensitivity() 與 CSV 匯出，
+ * 確認敏感度分析實際走到的呼叫路徑（而不只是直接呼叫篩選函式）。
+ * 搭配 mutation_check.cjs 可確認：刻意植入已知錯誤時，本測試確實會失敗。
+ *
  * 執行（需 Node.js 18 以上）：
  *   node validation/regression_tests.cjs index.html
  * 全部通過時結束碼為 0；任何一項失敗時為 1。
@@ -13,7 +18,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const htmlPath = process.argv[2] || path.join(__dirname, '..', 'index.html');
+const htmlPath = path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const html = fs.readFileSync(htmlPath, 'utf8');
 function loadSection(startText, endText) {
   const start = html.indexOf(startText);
@@ -44,11 +49,8 @@ function randomGraph(rnd, N, density, maxW) {
 const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
 
 // ---------- 測試框架 ----------
-const results = [];
-function test(name, fn) {
-  try { const detail = fn(); results.push({ name, ok: true, detail: detail || '' }); }
-  catch (e) { results.push({ name, ok: false, detail: e.message }); }
-}
+const queue = [];
+function test(name, fn) { queue.push({ name, fn }); }
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 const EPS = 1e-10;
 
@@ -180,10 +182,10 @@ test('11. 篩選門檻與最低觀察頻次分開記錄', () => {
   assert(info.appliedMin === 5 && info.equivalentMin === 5 && info.minObserved === 8, JSON.stringify(info));
 });
 
-test('12. 節點上限與邊界同分：等效門檻可重現相同節點集合', () => {
+test('12. 節點上限與邊界同分：等效門檻單獨即可重現入圖節點集合', () => {
   const rnd = lcg(5);
   let checked = 0;
-  for (let t = 0; t < 200; t++) {
+  for (let t = 0; t < 300; t++) {
     const n = 5 + Math.floor(rnd() * 40);
     const f = new Map(Array.from({ length: n }, (_, i) => ['w' + i, 1 + Math.floor(rnd() * 8)]));
     const cap = 3 + Math.floor(rnd() * 20);
@@ -191,8 +193,10 @@ test('12. 節點上限與邊界同分：等效門檻可重現相同節點集合'
       const minOcc = 1 + Math.floor(rnd() * 3);
       const { entries, info } = selectSnaEntries(f, minOcc, cap, tieMode, false);
       const got = entries.map(e => e[0]).sort();
-      const viaEq = [...f].filter(([, c]) => c >= info.equivalentMin && c >= info.appliedMin).map(([k]) => k).sort();
-      assert(JSON.stringify(got) === JSON.stringify(viaEq), `cap=${cap}, ${tieMode}: 等效門檻 ${info.equivalentMin} 無法重現節點集合`);
+      // 只用等效門檻篩選，不附加 appliedMin 或節點上限
+      const viaEq = [...f].filter(([, c]) => c >= info.equivalentMin).map(([k]) => k).sort();
+      assert(JSON.stringify(got) === JSON.stringify(viaEq), `cap=${cap}, ${tieMode}, minOcc=${minOcc}: 等效門檻 ${info.equivalentMin} 無法單獨重現節點集合`);
+      assert(info.equivalentMin >= info.appliedMin, `等效門檻 ${info.equivalentMin} 低於採用門檻 ${info.appliedMin}`);
       if (tieMode === 'exclude') assert(entries.length <= cap, `exclude 模式超過上限：${entries.length} > ${cap}`);
       if (!info.truncated) assert(info.equivalentMin === info.appliedMin, '未截斷時等效門檻應等於採用門檻');
       if (info.tieValue != null) {
@@ -205,9 +209,160 @@ test('12. 節點上限與邊界同分：等效門檻可重現相同節點集合'
   return `${checked} 組`;
 });
 
-// ---------- 輸出 ----------
-console.log(`\n工作台數值核心回歸測試（受測檔：${path.basename(htmlPath)}，版本 ${versionMatch ? versionMatch[1] : '未知'}）\n`);
-for (const r of results) console.log(`  [${r.ok ? '通過' : '失敗'}] ${r.name}${r.detail ? '：' + r.detail : ''}`);
-const passed = results.filter(r => r.ok).length;
-console.log(`\n結果：${passed} / ${results.length} 項通過\n`);
-process.exit(passed === results.length ? 0 : 1);
+test('13. 等效門檻邊界案例（ChatGPT 複核報告 §5.1 反例等）', () => {
+  const highs = n => Array.from({ length: n }, (_, i) => ['high' + i, 5]);
+  const check = (label, f, minOcc, cap, tieMode, expectSelected, expectEq) => {
+    const { entries, info } = selectSnaEntries(new Map(f), minOcc, cap, tieMode, false);
+    assert(entries.length === expectSelected, `${label}：預期入圖 ${expectSelected} 個，實得 ${entries.length}`);
+    assert(info.equivalentMin === expectEq, `${label}：預期等效門檻 ${expectEq}，實得 ${info.equivalentMin}`);
+    const viaEq = f.filter(([, c]) => c >= info.equivalentMin).length;
+    assert(viaEq === entries.length, `${label}：以 ≥ ${info.equivalentMin} 篩選得到 ${viaEq} 個`);
+  };
+  check('同分整批納入、下方有低頻詞', [...highs(12), ['low', 1]], 5, 10, 'include', 12, 5);
+  check('同分整批納入、沒有低頻詞', highs(12), 5, 10, 'include', 12, 5);
+  check('同分整批排除、下方仍有未納入候選', [['top1', 9], ['top2', 9], ...highs(12), ['low', 1]], 1, 10, 'exclude', 2, 6);
+  check('同分整批排除至空集合', highs(12), 5, 10, 'exclude', 0, 6);
+  check('上限未落在同分處', [['a', 9], ['b', 8], ['c', 7], ['d', 6], ['e', 5]], 1, 3, 'exclude', 3, 7);
+  return '5 組';
+});
+
+test('14. 嚴格模式 strictTooFew 的定義與最終入圖數分開記錄', () => {
+  const r1 = selectSnaEntries(new Map([['A', 1]]), 1, 120, 'exclude', false);
+  assert(r1.info.strictTooFew === false && r1.info.selected === 1, '門檻 1 不屬於「本應放寬」的情形');
+  const r2 = selectSnaEntries(new Map([['A', 10], ['B', 8]]), 5, 120, 'exclude', false);
+  assert(r2.info.strictTooFew === true && r2.info.selected === 2, '門檻 5 時候選 2 個，應標記為本應放寬而未放寬');
+});
+
+// ---------- 3. 整合測試：應用程式本身的敏感度分析呼叫路徑 ----------
+function locatePapa() {
+  for (const p of [path.join(path.dirname(htmlPath), 'lib', 'papaparse.min.js'), path.join(__dirname, '..', 'lib', 'papaparse.min.js')]) {
+    if (fs.existsSync(p)) return require(p);
+  }
+  throw new Error('找不到 lib/papaparse.min.js');
+}
+function loadApp() {
+  const els = new Map(), downloads = [];
+  const el = id => {
+    if (!els.has(id)) els.set(id, { value: '', checked: false, disabled: false, innerHTML: '', textContent: '', title: '', classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } } });
+    return els.get(id);
+  };
+  const ctx = vm.createContext({
+    document: { getElementById: el }, console, setTimeout, Blob, Map, Set, Papa: locatePapa(),
+    alert: m => { throw new Error('alert：' + m); },
+    triggerDownload: (blob, name) => downloads.push({ blob, name }), getTimestampStr: () => 'test',
+    escapeHtml: x => String(x), escapeHtmlAttr: x => String(x),
+    getEffectiveTargetTerm: x => x, extractRawKeywordsFromDoc: d => d.kws,
+    renderSnaMetricsTable: () => {}, renderD3Network: () => {},
+    CLUSTER_COLORS: ['#111', '#222', '#333', '#444', '#555', '#666', '#777', '#888'], DP: { open: false }
+  });
+  const section = (a, b) => {
+    const st = html.indexOf(a), en = html.indexOf(b, st);
+    if (st < 0 || en <= st) throw new Error(`找不到程式區塊：${a}`);
+    vm.runInContext(html.slice(st, en), ctx);
+  };
+  section('    function computeMergedFreqMap', '    function applyTableFiltersAndRender');
+  section('    function computeCoverage', '    function renderSnaMetricsTable');
+  section('    const SENS = ', "    document.getElementById('btnOpenSens')");
+  vm.runInContext('var activeDocs = []; var userExcludeSet = new Set(); var computedSnaResults = null;', ctx);
+  return {
+    ctx, el, downloads,
+    analyze(docs, { min, cap = 120, tie = 'exclude', weight = 'raw', gamma = '1.2' }) {
+      el('selectKwMode').value = 'author_only'; el('snaMinOccInput').value = String(min);
+      el('snaMaxNodesInput').value = String(cap); el('snaTieModeSelect').value = tie;
+      el('clusterWeightSelect').value = weight; el('clusterResolutionInput').value = gamma;
+      ctx.__docs = docs;
+      vm.runInContext('activeDocs = __docs; executeSnaAndRenderGraph();', ctx);
+      return vm.runInContext('computedSnaResults', ctx);
+    },
+    async sensitivity({ gammas = '1.2', thresholds, weight = 'raw' }) {
+      vm.runInContext('openSensModal()', ctx);
+      el('sensGammas').value = gammas; el('sensMinOccs').value = thresholds;
+      el('sensWRaw').checked = weight === 'raw'; el('sensWAssoc').checked = weight === 'assoc';
+      await vm.runInContext('runSensitivity()', ctx);
+      return vm.runInContext('SENS.results', ctx);
+    },
+    async csv(fnName) {
+      downloads.length = 0;
+      vm.runInContext(fnName + '()', ctx);
+      const text = await downloads[0].blob.text();
+      return ctx.Papa.parse(text.replace(/^﻿/, ''), { header: true, skipEmptyLines: true }).data;
+    }
+  };
+}
+const kwDocs = list => list.map(kws => ({ kws }));
+
+test('15. 整合：主分析放寬、敏感度分析嚴格（門檻 1／8／9／11）', async () => {
+  const app = loadApp();
+  // A 出現 10 篇、B 8 篇、C 2 篇、D 1 篇
+  const docs = kwDocs(Array.from({ length: 10 }, (_, i) => ['A', ...(i < 8 ? ['B'] : []), ...(i < 2 ? ['C'] : []), ...(i < 1 ? ['D'] : [])]));
+  const r = app.analyze(docs, { min: 9 });
+  assert(r.macro.selectionInfo.relaxed === true && r.macro.N === 4, `主分析應放寬為 4 個節點，實得 relaxed=${r.macro.selectionInfo.relaxed}, N=${r.macro.N}`);
+  const res = await app.sensitivity({ thresholds: '1,8,9,11' });
+  const by = t => res.configs.find(c => c.minOcc === t);
+  assert(by(1).computable && by(1).isRef && by(1).N === 4, '門檻 1 應等同目前分群');
+  for (const [t, n] of [[8, 2], [9, 1], [11, 0]]) {
+    const c = by(t);
+    assert(c.N === n, `門檻 ${t}：預期 ${n} 個節點（嚴格、不放寬），實得 ${c.N}`);
+    assert(!c.computable && c.Qgamma === null && c.ari === null, `門檻 ${t}：不應進行分群`);
+    assert(c.sel.relaxed === false, `門檻 ${t}：不應放寬`);
+  }
+  assert(by(11).reason.includes('沒有出現篇數'), `門檻 11 原因文字：${by(11).reason}`);
+  assert(by(8).reason.includes('少於 3'), `門檻 8 原因文字：${by(8).reason}`);
+  const rows = await app.csv('exportSensConfigsCsv');
+  for (const row of rows) assert(row.Threshold_Relaxed === 'no', 'CSV：敏感度分析不應出現放寬');
+  for (const row of rows.filter(x => x.Requested_Min_Occurrences !== '1')) {
+    assert(row.Clustering_Computed === 'no' && row.Objective_Q_gamma === '' && row.ARI_vs_Current === '', `CSV 門檻 ${row.Requested_Min_Occurrences}：未分群的列不應有 Q 或 ARI`);
+  }
+  return '主分析 4 節點；敏感度 2／1／0 節點未分群；CSV 一致';
+});
+
+test('16. 整合：同分整批納入時，等效門檻不低於要求門檻（畫面與 CSV）', async () => {
+  const app = loadApp();
+  const highs = Array.from({ length: 12 }, (_, i) => 'high' + i);
+  const docs = kwDocs([...Array.from({ length: 5 }, () => highs), ['low']]);
+  const r = app.analyze(docs, { min: 5, cap: 10, tie: 'include' });
+  const sel = r.macro.selectionInfo;
+  assert(r.macro.N === 12 && sel.truncated && sel.equivalentMin === 5, `入圖 ${r.macro.N}、等效門檻 ${sel.equivalentMin}`);
+  const text = app.ctx.inclusionText(sel);
+  assert(text.startsWith('出現篇數 ≥ 5'), `入圖條件文字：${text}`);
+  await app.sensitivity({ thresholds: '5' });
+  const rows = await app.csv('exportSensConfigsCsv');
+  assert(rows[0].Equivalent_Min_Occurrences === '5' && rows[0].Applied_Min_Occurrences === '5', `CSV 等效門檻 ${rows[0].Equivalent_Min_Occurrences}`);
+});
+
+test('17. 整合：候選全數因上限與同分排除時，原因文字正確；目前網路為空時停用敏感度分析', async () => {
+  const app = loadApp();
+  const highs = Array.from({ length: 12 }, (_, i) => 'high' + i);
+  const r = app.analyze(kwDocs(Array.from({ length: 5 }, () => highs)), { min: 5, cap: 10, tie: 'exclude' });
+  assert(r.macro.N === 0 && r.macro.selectionInfo.eligible === 12, `主分析 N=${r.macro.N}`);
+  const reason = app.ctx.sensNotComputedReason({ N: 0, selection: r.macro.selectionInfo });
+  assert(reason.includes('節點上限') && reason.includes('12 個候選'), `原因文字：${reason}`);
+  const res = await app.sensitivity({ thresholds: '5' });
+  assert(res === null && app.el('sensRun').disabled === true, '目前網路未分群時，敏感度分析應停用');
+});
+
+test('18. 整合：零邊網路不顯示聚落編號與聚落數', async () => {
+  const app = loadApp();
+  const r = app.analyze(kwDocs([['A'], ['B'], ['C']]), { min: 1 });
+  assert(r.macro.N === 3 && r.macro.clusterInfo.computable === false, '應為 3 個節點、未分群');
+  assert(r.nodes.every(n => n.cluster === null), `聚落編號應為 null，實得 ${r.nodes.map(n => n.cluster)}`);
+  assert(r.macro.clusterCount === null, `聚落數應為 null，實得 ${r.macro.clusterCount}`);
+  const stats = app.el('snaMacroStats').textContent;
+  assert(stats.includes('聚落數: 不適用') && stats.includes('模組度：不適用'), `主統計：${stats}`);
+  const res = await app.sensitivity({ thresholds: '1' });
+  assert(res === null, '零邊網路不應執行敏感度分析');
+});
+
+// ---------- 執行與輸出 ----------
+(async () => {
+  const results = [];
+  for (const { name, fn } of queue) {
+    try { const detail = await fn(); results.push({ name, ok: true, detail: detail || '' }); }
+    catch (e) { results.push({ name, ok: false, detail: e.message }); }
+  }
+  console.log(`\n工作台數值核心回歸測試（受測檔：${path.basename(htmlPath)}，版本 ${versionMatch ? versionMatch[1] : '未知'}）\n`);
+  for (const r of results) console.log(`  [${r.ok ? '通過' : '失敗'}] ${r.name}${r.detail ? '：' + r.detail : ''}`);
+  const passed = results.filter(r => r.ok).length;
+  console.log(`\n結果：${passed} / ${results.length} 項通過\n`);
+  process.exit(passed === results.length ? 0 : 1);
+})();
