@@ -651,13 +651,18 @@
         <div class="space-y-1">
           <div class="text-sm font-bold text-slate-800">VOSviewer &amp; SNA 知識結構分析工作台</div>
           <div class="text-slate-500">VOSviewer &amp; SNA Knowledge Structure Analysis Workbench</div>
-          <div class="text-slate-500">版本 <span id="appVersion"></span> · <span id="appUpdated"></span></div>
+          <div class="text-slate-500">版本 <span id="appVersion"></span> · <span id="appUpdated"></span> · <button id="btnImpactNotes" type="button" class="text-indigo-600 hover:underline font-semibold" aria-expanded="false" aria-controls="impactNotesPanel">影響分析結果的修正 ▾</button></div>
         </div>
         <div class="space-y-1">
           <div class="text-[11px] font-semibold text-slate-500">開發者 Developer</div>
           <div class="text-slate-800"><b>林祖強</b>｜國立高雄師範大學 科學教育暨環境教育研究所</div>
           <div class="text-slate-600"><b>Tzu-Chiang Lin</b>｜Graduate Institute of Science Education and Environmental Education, National Kaohsiung Normal University, Taiwan</div>
         </div>
+      </div>
+      <div id="impactNotesPanel" class="hidden mt-4 pt-4 border-t border-slate-100 text-xs text-slate-700">
+        <div class="font-bold text-slate-900 mb-1">⚠️ 影響分析結果的修正</div>
+        <p class="text-[11px] text-slate-500 mb-2">若您曾以下列版本分析且符合所述情況，請以目前版本重新計算。</p>
+        <ul id="impactNotesList" class="space-y-1.5 text-[11px] leading-relaxed list-disc pl-5"></ul>
       </div>
       <div class="mt-4 pt-3 border-t border-slate-100 space-y-1 text-[11px] text-slate-500 leading-relaxed">
         <p>本工具開發過程使用生成式 AI（Google Gemini、Anthropic Claude）協助撰寫程式碼；功能設計、方法學決策與結果驗證由開發者負責。</p>
@@ -670,10 +675,26 @@
     /********************************************************************
      * 版本資訊：每次發布新版本時，只需修改這兩個常數（頁尾會自動更新）
      ********************************************************************/
-    const APP_VERSION = '5.9';
+    const APP_VERSION = '5.10';
     const APP_UPDATED = '2026-11-02';
     document.getElementById('appVersion').textContent = APP_VERSION;
     document.getElementById('appUpdated').textContent = APP_UPDATED;
+
+    // 頁尾「影響分析結果的修正」：只收錄會改變分析結果或其解讀的修正，每筆一句話。
+    // 發布新的此類修正時，在陣列最前面新增一筆，並同步更新 README「已知問題與修正紀錄」。
+    const IMPACT_NOTES = [
+      { fixedIn: '5.9', text: '5.8 的敏感度比較表在節點上限被觸發且同分整批納入時，「等效門檻」數值偏低，請重新匯出。' },
+      { fixedIn: '5.8', text: '5.7 以前的敏感度分析中，若某門檻下節點少於 3 個，門檻會被自動放寬而未標示，請重新確認比較結果。' },
+      { fixedIn: '5.8', text: '5.7 以前使用解析度 γ ≠ 1 時，最終分群的挑選方式有誤，請重新計算（γ = 1 不受影響）。' }
+    ];
+    document.getElementById('impactNotesList').innerHTML = IMPACT_NOTES
+      .map(n => `<li>${n.text}<span class="text-slate-400">（${n.fixedIn} 修正）</span></li>`).join('');
+    document.getElementById('btnImpactNotes').addEventListener('click', e => {
+      const panel = document.getElementById('impactNotesPanel');
+      const open = panel.classList.toggle('hidden') === false;
+      e.currentTarget.setAttribute('aria-expanded', String(open));
+      e.currentTarget.textContent = `影響分析結果的修正 ${open ? '▴' : '▾'}`;
+    });
 
     /********************************************************************
      * 學術方法與計量指標小辭典資料庫 (Glossary Data)
